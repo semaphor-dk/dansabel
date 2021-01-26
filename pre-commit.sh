@@ -25,11 +25,6 @@ fejl()
     exit 1
 }
 
-# TODO this is a slightly broken concept.
-# technically we should be working on the files that are
-# results of merging the staged patches; not the current file in the
-# checkout. :-/
-
 # make sure we have a an accurate index of the files that have changed:
 git update-index -q --refresh
 
