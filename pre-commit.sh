@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 
-# exit ved fejl
+# exit on error
 set -eu
 
 afslut()
 {
-    # nulstil farver
-    echo -n $'\x1b[0m'
+    # reset colors
+    printf '\e[0m'
     [[ "${our_dir}" =~ "githooks-precommit" ]] && rm -rf -- "${our_dir}"
 }
 

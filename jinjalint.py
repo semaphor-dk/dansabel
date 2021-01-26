@@ -190,6 +190,7 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
             open_tag_stack.append(tok['tag'])
         if is_scope_close(tok):
             open_tag_stack = open_tag_stack[:-1] # .pop() without exception
+        offset = 14 + 2*(len(open_tag_stack) -1)
         for lin in tok['lines']:
             is_new_line = (lin['line'] != current_line)
             if is_new_line:
@@ -241,12 +242,12 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
                     linebuf += Colored(VERTICAL_PIPE +' ', open_tag_stack)
                 linebuf += Colored('┣'+HORIZONTAL_PIPE, open_tag_stack[-1])
             linebuf += Colored(HORIZONTAL_PIPE*(len(open_tag_stack) -1), tok['tag'])
-            linebuf += Colored('━' * (14+2*(len(open_tag_stack)-1)-len(tok['tag'])), tok['tag'])+' '
+            linebuf += Colored('━' * (offset-len(tok['tag'])), tok['tag'])+' '
             linebuf += tok['tag'] + ': '
             linebuf += Colored(transformed, tok['tag'])
             for annot in filter(lambda x: x['tok'] == tok, annotations):
-                for msg in textwrap.wrap('\u269e ' + annot['comment'] + '\u269f', width=OUT_COLS - 2*(len(open_tag_stack)-1)):
-                    linebuf += '\n' + ' '  * 2*(len(open_tag_stack)-1)
+                for msg in textwrap.wrap('\u269e ' + annot['comment'] + '\u269f', width=max(8, OUT_COLS - offset)):
+                    linebuf += '\n' + ' '  * offset
                     linebuf += Colored(msg, 'comment')
             if 'NOT_CONSUMED' == tok['tag']: break # only print the first unlexed line
     if current_line in relevant_lines:
