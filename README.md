@@ -13,7 +13,7 @@ The name *dansabel* is the Danish translation of "danceable" - it helps detect w
 
 Dansabel is written and published by [Semaphor](https://semaphor.dk). Founded in 1992 it is a Danish software consultancy and hosting provider that aims to support an open, free, and decentralized internet through its participation in the FOSS communities and using FOSS software to the benefit of our customers. When not faced with global pandemics you can meet us at [BornHack](https://bornhack.dk), CCC, and other community camps, but for the time being we'll have to make do with [email](mailto:info@semaphor.dk) and Jitsi calls. In any case, feel free to contact us.
 
-![Screenshot of commandline usage](jinjalint.png)
+![Screenshot of commandline usage](https://user-images.githubusercontent.com/69192941/105885543-8ce93d00-6009-11eb-9b4e-4cdfc8080dfc.png)
 
 *Screenshot: The Jinja linter in action highlighting a problem. The first excerpt shows the template contents with lexer token highlighting; the second shows the same section, but listed by individual tokens.*
 
