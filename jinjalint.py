@@ -6,6 +6,9 @@ import jinja2.sandbox
 import os
 import difflib # used for misspelled keyword suggestions
 import textwrap
+import argparse
+
+verbosity = 0
 
  # set to False to return success when there is no parser error,
  # but jinjalint had comments; this should be a cli switch:
@@ -144,6 +147,13 @@ def lexed_loc(item):
 def token_text(item):
     return ''.join([x['text'] for x in item['lines']])
 
+def tokens_match(left, right):
+    # try to makes sure we match e.g '{%' and '-%}\n' with each other:
+    left = left.rstrip('-').strip()
+    right = right.lstrip('-').strip()
+    return (left,right) in [ ('(',')'), ('[',']'), ('{','}'),
+                             ('{{','}}'), ('{%','%}'), ('{#','#}'), ]
+
 def is_scope_open(tok):
     if tok['tag'].endswith('_begin'): return True
     return ('operator' == tok['tag'] and token_text(tok) in ['[', '(', '{'])
@@ -155,8 +165,10 @@ def is_scope_close(tok):
 def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], debug=False):
     if all(map(lambda x: 'data' == x['tag'], lexed)): return
     if not isinstance(parse_e, Exception): # Target, not Exception (we always print parser exceptions)
-        if not annotations: return # skip when there are no parser exceptions and no annotations
-    LAST_THRESHOLD = 3 # must be 2 or larger
+        if not annotations: # skip when there are no parser exceptions and no annotations
+            if not verbosity:
+                return
+    LAST_THRESHOLD = 3 # must be >=1
     relevant_lines = set()
 
     # first we try to establish which lines we are interested in looking at:
@@ -176,10 +188,12 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
     for lineno in marked_lines:
         relevant_lines.update(range(lineno - LAST_THRESHOLD,
                                     lineno + LAST_THRESHOLD + 1))
-    for line in list(relevant_lines):
+    for line in relevant_lines.copy(): # copy because we update it:
         # remove one-line gaps; just print the line instead of "skipped 1 line":
         if line -2 in relevant_lines:
             relevant_lines.add(line-1)
+    if verbosity:
+        relevant_lines.update(range(0, lexed[-1]['lines'][-1]['line']+2))
 
     open_tag_stack = []
     current_line = 0
@@ -188,14 +202,15 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
     for tok in lexed:
         if is_scope_open(tok):
             open_tag_stack.append(tok['tag'])
+        indent_level = len(open_tag_stack)
+        offset = 14 + 2*(indent_level)
         if is_scope_close(tok):
             open_tag_stack = open_tag_stack[:-1] # .pop() without exception
-        offset = 14 + 2*(len(open_tag_stack) -1)
         for lin in tok['lines']:
             is_new_line = (lin['line'] != current_line)
             if is_new_line:
                 if current_line in relevant_lines:
-                    skipped = current_line + min(-1-last_printed, 1- lexed[0]['lines'][0]['line'])
+                    skipped = current_line + min(-1-last_printed, -lexed[0]['lines'][0]['line'])
                     if skipped > 0: # for first line will be -1
                         if debug: output() # blank line for the debug view
                         output((UNICODE_DOT * 3).rjust(11) + ' (' + str(skipped)+ ' lines)',
@@ -214,7 +229,6 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
 
             if not debug: # this is the inline display:
                 if is_new_line:
-                    linebuf += '\n'
                     linebuf += Colored(str(current_line).ljust(5), line_color)
                 linebuf += Colored(lin.get('text'), tok['tag'])
                 if 'NOT_CONSUMED' == tok['tag']:
@@ -222,8 +236,7 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
                 continue
 
             transformed = repr(lin['text'])[1:-1] # strip single-quotes that repr() always adds
-            if transformed == "\\n": # save some screen space:
-                transformed = '↵'
+            transformed = transformed.replace("\\n", '↵')
             if ( abs(last_printed - current_line) <= 1) and tok['tag'] in ('whitespace', 'data'):
                 # Tack insignificant tokens onto the end of the previous token display.
                 # We don't do this for the first line, or after skipping.
@@ -233,16 +246,19 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
                 linebuf += Colored('\n')
             linebuf += Colored(str(lin['line']).rjust(4) + ':'+
                                str(lin['byteoff']).ljust(3), line_color)
-            if is_scope_open(tok): # Colored(VERTICAL_PIPE) is required to avoid str.__add__():
-                linebuf += Colored(VERTICAL_PIPE + ' ') * (len(open_tag_stack)-1) + Colored('┏' + HORIZONTAL_PIPE, tok['tag'])
-            elif is_scope_close(tok):
-                linebuf += Colored(VERTICAL_PIPE + ' ') * (len(open_tag_stack)-1) + Colored('┗'+HORIZONTAL_PIPE, tok['tag'])
-            elif open_tag_stack:
-                for color_tag in open_tag_stack[:-1]:
-                    linebuf += Colored(VERTICAL_PIPE +' ', open_tag_stack)
-                linebuf += Colored('┣'+HORIZONTAL_PIPE, open_tag_stack[-1])
-            linebuf += Colored(HORIZONTAL_PIPE*(len(open_tag_stack) -1), tok['tag'])
-            linebuf += Colored('━' * (offset-len(tok['tag'])), tok['tag'])+' '
+            for color_tag in open_tag_stack[:-1]:
+                linebuf += Colored(VERTICAL_PIPE +' ', color_tag)
+            if is_scope_close(tok):
+                if open_tag_stack:
+                    linebuf += Colored(VERTICAL_PIPE +' ', open_tag_stack[-1])
+                linebuf += Colored('┗' + HORIZONTAL_PIPE, tok['tag'])
+            elif is_scope_open(tok):
+                linebuf += Colored('┏' + HORIZONTAL_PIPE, tok['tag'])
+            else:
+                tag = open_tag_stack and open_tag_stack[-1] or tok['tag']
+                linebuf += Colored('┣' + HORIZONTAL_PIPE, tag)
+            linebuf += Colored(HORIZONTAL_PIPE * (indent_level), tok['tag'])
+            linebuf += Colored(HORIZONTAL_PIPE * (offset-len(tok['tag'])), tok['tag'])+' '
             linebuf += tok['tag'] + ': '
             linebuf += Colored(transformed, tok['tag'])
             for annot in filter(lambda x: x['tok'] == tok, annotations):
@@ -254,6 +270,8 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
         output(linebuf, end='')
     if debug: # display with syntax highlighting inline
         output(Colored('\n' + HORIZONTAL_PIPE * OUT_COLS, 'string'))
+        if verbosity:
+            output(f'{UNICODE_DOT} {node_path}')
         if parse_e:
             output(f'{UNICODE_DOT} {node_path}', parse_e.lineno, Colored('jinja parser', 'ERROR'),
                    Colored(parse_e.message, 'ERROR'), sep=f' {VERTICAL_PIPE} ')
@@ -293,11 +311,16 @@ def parse_lexed(lexed):
     recommendations = []
     for i in range(len(lexed)):
         tok = lexed[i]
+        this_token_closed = None # ref to popped begins[-1] if any
+        def recommend(comment, token=lexed[i], related=[]):
+            recommendations.append({'tok': token, 'comment': comment, 'related_tokens': related})
         ## This looks for "filters", aka tag {name} following {operator "|"}:
         if is_scope_open(tok):
             begins.append(tok)
         elif is_scope_close(tok):
-            begins.pop() # TODO should pop last matching type; anything else is an error
+            this_token_closed = begins.pop() # TODO should pop last matching type; anything else is an error
+            if not tokens_match(token_text(this_token_closed), token_text(tok)):
+                recommend('Unclosed block?', related=[this_token_closed])
         if 'operator' == tok['tag'] and token_text(tok) == '|':
             for next in lexed[i + 1:]: # skipping whitespace, TODO comments?
                 if next['tag'] in ('whitespace',): continue
@@ -310,29 +333,26 @@ def parse_lexed(lexed):
                         'related_tokens': [],
                         'comment': 'Not a builtin filter? Maybe: ' + suggest})
                 break
-        def recommend(comment, token=lexed[i], related=[]):
-            recommendations.append({'tok': token, 'comment': comment, 'related_tokens': related})
+        # BELOW: Heuristics that depend on look-ahead:
         if i+1 == len(lexed): continue
-        if 'operator' == lexed[i]['tag'] and 'operator' == lexed[i+1]['tag'] and \
+        if 'operator' == tok['tag'] and 'operator' == lexed[i+1]['tag'] and \
            lexed[i] not in begins:
             #recommend('Two operators in a row?')
             if '{' == token_text(lexed[i]) and begins:
                 recommend('Did you forget to close this? Nested tags found.',
                           token=begins[-1]['lines'][0])
-        elif 'operator' == lexed[i]['tag'] and '}' == token_text(lexed[i]):
+        elif 'operator' == tok['tag'] and '}' == token_text(tok):
             cand = list(filter(lambda x: token_text(x).startswith('{'), begins))
-            if cand:
+            if cand and not (this_token_closed and tokens_match(token_text(this_token_closed), token_text(tok))):
                 recommend('Found single "}" operator at ' + lexed_loc(lexed[i]) + \
                           ', did you mean to close '+ repr(token_text(cand[0])) + \
                           ' at ' + lexed_loc(cand[0]) + '?',
                           related=[cand[0]] # mark for display
                           )
-            else:
-                recommend('Found single "}" operator; usually not what you want')
     if begins:
         # TODO only warn if there's no lexer error?
         #if not any(filter(lambda x: 'NOT_CONSUMED' == x['tag'] and '}' in token_text(x), lexed)):
-        recommendations.insert(0,{'tok': begins[0],
+        recommendations.insert(0,{'tok': begins[-1],
                                   'comment': 'This may be an unclosed block?',
                                   'related_tokens': [],
                                   })
@@ -349,7 +369,7 @@ def check_str(yaml_node, pos_stack):
     lexer_e.lineno = 0 # defined here because we may to lift an exc out of its scope
     for i, p in enumerate(pos_stack):
         if p[2]: # skip intermediary AST nodes that we have no name for
-            if i >3: node_path += '.'
+            if i > 1: node_path += '.'
             node_path += str(p[2])
     try:
         d = jinja2.sandbox.ImmutableSandboxedEnvironment().parse(source=s, name=node_path, filename='JINJA_TODO_FILENAME_SEEMS_UNUSED')
@@ -405,7 +425,7 @@ def check_str(yaml_node, pos_stack):
     annotations = parse_lexed(lexed)
     print_lexed_debug(lexed, node_path, parse_e, lexer_e, annotations=annotations,
                       debug=False)
-    if annotations:
+    if annotations or (verbosity and len(lexed)>1):
         output('\n' + '~' * OUT_COLS) # separate the inline view from per-token listing
         print_lexed_debug(lexed, node_path, parse_e, lexer_e,
                           annotations=annotations, debug=True)
@@ -417,7 +437,7 @@ S_VAL = 20
 S_SEQ = 30
 
 def check_val(doc, pos_stack, error=False):
-    state = [ (0, '') ] # list of tuples of state and data (used for list item counting)
+    state = [ (S_VAL,0) ] # list of tuples of state and data (used for list item counting)
     while True:
         try:
             v = next(doc)
@@ -427,25 +447,60 @@ def check_val(doc, pos_stack, error=False):
             output('YAML parser/lexer exit before end of document.')
             output(Colored(HORIZONTAL_PIPE * OUT_COLS, 'ERROR'))
             return True # this is an error
+        # TODO need to implement special handling of the 'when:' keys
         if isinstance(v, ruamel.yaml.events.ScalarEvent):
-            error |= check_str(v, pos_stack)
             if S_KEY == state[-1][0]:
-                pos_stack.append( (pos_stack[-1][0], pos_stack[-1][1], v.value) )
+                error |= check_str(v, pos_stack)
                 state[-1] = (S_VAL, None)
+                if 'when' == v.value:
+                    state[-1] = (S_VAL, 'when') # need to implement special handling
+                if 'name' == v.value:
+                    state[-1] = (S_VAL, 'name') # TODO need to handle
+                # here we change the name of the parent mapping itself (starts out as empty):
+                pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], v.value)
             elif S_SEQ == state[-1][0]:
-                state[-1] = (state[-1][0], state[-1][0] + 1)
+                error |= check_str(v, pos_stack)
+                next_idx = state[-1][1] + 1
+                state[-1] = (state[-1][0], next_idx)
+                pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], next_idx)
             elif S_VAL == state[-1][0]:
-                pos_stack.pop()
+                if state[-1][1] == 'name':
+                    error |= check_str(v, pos_stack)
+                    # set context name of the parent node to the value of this:
+                    if len(state) > 1 and state[-2][0] == S_SEQ:
+                        pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], v.value)
+                elif state[-1][1] == 'when':
+                    # TODO this is kind of a hack, and it skews the column numbers:
+                    v.value = '{{' + v.value + '}}'
+                    error |= check_str(v, pos_stack)
+                else:
+                    error |= check_str(v, pos_stack)
                 state[-1] = (S_KEY, None)
-        elif isinstance(v, ruamel.yaml.events.SequenceStartEvent):
-            state.append( (S_SEQ, 0) )
-        elif isinstance(v, ruamel.yaml.events.MappingStartEvent):
-            state.append((S_KEY, None))
-            pos_stack.append((v.start_mark, v.end_mark, ''))
+        elif isinstance(v, ruamel.yaml.events.SequenceStartEvent) \
+             or isinstance(v, ruamel.yaml.events.MappingStartEvent):
+            # Usually when we reach here we will be in either S_SEQ (a list item)
+            # or S_VAL state. If we are in S_VAL state, we need to transition
+            # to S_KEY state in the parent context (because this mapping will be
+            # said mapping):
+            if state and state[-1][0] == S_VAL:
+                state[-1] = (S_KEY, state[-1][1])
+            elif state and state[-1][0] == S_SEQ:
+                pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], str(state[-1][1]))
+                next_idx = state[-1][1] + 1
+                state[-1] = (state[-1][0], next_idx)
+            # Open a new context for the contents of this mapping:
+            if isinstance(v, ruamel.yaml.events.SequenceStartEvent):
+                state.append( (S_SEQ, 0) )
+                pos_stack.append((v.start_mark, v.end_mark, 'SEQ'))
+            else:
+                state.append((S_KEY, None))
+                pos_stack.append((v.start_mark, v.end_mark, 'MAP'))
         elif isinstance(v, ruamel.yaml.events.MappingEndEvent):
             state.pop()
+            pos_stack.pop()
         elif isinstance(v, ruamel.yaml.events.SequenceEndEvent):
-            state.pop()
+            old = state.pop()
+            assert(old[0] == S_SEQ)
             pos_stack.pop()
         elif isinstance(v, ruamel.yaml.events.DocumentStartEvent): pass
         elif isinstance(v, ruamel.yaml.events.DocumentEndEvent):   pass
@@ -499,16 +554,21 @@ def lint(filename):
             doc = ruamel_generator(filename)
         else: # assume it's raw jinja2, mock up AST nodes:
             doc = raw_scalar_generator(filename)
-        return check_val(doc, pos_stack=[[0,0,filename + ':']])
+        return check_val(doc, pos_stack=[(0,0,filename + ':')])
     except Exception as e:
         import traceback
         output(traceback.format_exc())
         return True # that did not go well, perhaps file not found or yaml parsing err
 
 if '__main__' == __name__:
+    a_parser = argparse.ArgumentParser()
+    a_parser.add_argument('FILE', nargs='+')
+    a_parser.add_argument('-C', '--context-lines', type=int, help="NOT IMPLEMENT Number of context lines controls LAST_THRESHOLD")
+    args = a_parser.parse_args()
+
     error = False
     # we do not support any flags, so for now we just:
-    for filename in sys.argv[1:]:
+    for filename in args.FILE:
         if '--' == filename: continue
         error |= lint(filename)
     sys.exit(error)
