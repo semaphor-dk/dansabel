@@ -358,19 +358,23 @@ def parse_lexed(lexed):
                                   })
     return recommendations
 
-
-def check_str(yaml_node, pos_stack):
-    '''returns True on error, False on success'''
-    s = yaml_node.value
+def get_node_path(pos_stack):
+    '''Returns a string representation of the AST node's path'''
     node_path = ''
-    parse_e = Target()
-    parse_e.lineno = 0 # elsewhere we treat 'not lineno' as lack of information
-    lexer_e = Target()
-    lexer_e.lineno = 0 # defined here because we may to lift an exc out of its scope
     for i, p in enumerate(pos_stack):
         if p[2]: # skip intermediary AST nodes that we have no name for
             if i > 1: node_path += '.'
             node_path += str(p[2])
+    return node_path
+
+def check_str(yaml_node, pos_stack):
+    '''returns True on error, False on success'''
+    s = yaml_node.value
+    parse_e = Target()
+    parse_e.lineno = 0 # elsewhere we treat 'not lineno' as lack of information
+    lexer_e = Target()
+    lexer_e.lineno = 0 # defined here because we may to lift an exc out of its scope
+    node_path = get_node_path(pos_stack)
     try:
         d = jinja2.sandbox.ImmutableSandboxedEnvironment().parse(source=s, name=node_path, filename='JINJA_TODO_FILENAME_SEEMS_UNUSED')
         # TODO good place to return False if we don't care about non-parser errors
