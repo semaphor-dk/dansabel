@@ -7,6 +7,7 @@ import os
 import difflib # used for misspelled keyword suggestions
 import textwrap
 import argparse
+import shlex
 
 verbosity = 0
 
@@ -436,6 +437,49 @@ def check_str(yaml_node, pos_stack):
         return FAIL_WHEN_ONLY_ANNOTATIONS
     return isinstance(parse_e, Exception)
 
+def check_shell_command(v, pos_stack):
+    '''Best-effort shell parsing'''
+    error = False
+    text = v.value
+    s = shlex.shlex(text, posix=True, punctuation_chars=True)
+    s.whitespace_split = True
+    try:
+        cmd = shlex.split(text)
+    except ValueError as e:
+        output(Colored(HORIZONTAL_PIPE * OUT_COLS, 'string'))
+        error = True
+        cmd = None
+        last_loc = (v.start_mark.line, 0)
+        try:
+            for tok in s:
+                this_loc = v.start_mark.line + s.lineno, s.instream.tell()
+                # print locations for each lexed token:
+                #output(Colored(str(last_loc) + '-'+(str(this_loc))+':'+repr(tok), 'ERROR'), endline='')
+                last_loc = this_loc
+        except ValueError as e:
+            lex_stop = s.instream.tell()
+            www = text[:last_loc[1]].split('\n')
+            output(Colored(text[:last_loc[1]], 'variable_begin'), Colored(text[last_loc[1]:lex_stop].rstrip(), 'ERROR'))
+            output(Colored('SHELL PARSING ERROR', 'ERROR'), f'{get_node_path(pos_stack)}:', 'line', v.start_mark.line + s.lineno, Colored(e, 'ERROR'))
+
+    # BELOW: Warn about things that bite:
+    # Should really generalize the printing/annotation parts from the jinja parser with the shell parsing.
+    context = f'in {get_node_path(pos_stack)} line:{v.start_mark.line+1}'
+    if cmd and 'psql' in cmd:
+        if not 'ON_ERROR_STOP=' in text:
+            output(Colored(HORIZONTAL_PIPE * OUT_COLS, 'string'))
+            output(Colored('psql command without -v ON_ERROR_STOP=1', 'comment'), f'{context} - if this SQL command fails, it will still exit with exit code status zero (success) and Ansible will not detect the error. Also consider --single-transaction if you do not explicitly use transactions.')
+            error = True
+    if ';}' in cmd or ';};' in cmd: # detects most common broken shell grouping
+        output(Colored(HORIZONTAL_PIPE * OUT_COLS, 'string'))
+        output(Colored('WARNING: ";}" found, did you mean "; }" ?', 'comment'), context)
+
+    # TODO: return error
+    # Commented out for now because we risk failing perfectly fine commands
+    # that are subject to Jinja2 expansion when the Jinja2 templating itself constitutes
+    # a parsing error
+    return False
+
 S_KEY = 10
 S_VAL = 20
 S_SEQ = 30
@@ -455,11 +499,8 @@ def check_val(doc, pos_stack, error=False):
         if isinstance(v, ruamel.yaml.events.ScalarEvent):
             if S_KEY == state[-1][0]:
                 error |= check_str(v, pos_stack)
-                state[-1] = (S_VAL, None)
-                if 'when' == v.value:
-                    state[-1] = (S_VAL, 'when') # need to implement special handling
-                if 'name' == v.value:
-                    state[-1] = (S_VAL, 'name') # TODO need to handle
+                state[-1] = (S_VAL, v.value)
+                # 'name', 'when', etc need special handling
                 # here we change the name of the parent mapping itself (starts out as empty):
                 pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], v.value)
             elif S_SEQ == state[-1][0]:
@@ -477,6 +518,13 @@ def check_val(doc, pos_stack, error=False):
                     # TODO this is kind of a hack, and it skews the column numbers:
                     v.value = '{{' + v.value + '}}'
                     error |= check_str(v, pos_stack)
+                elif state[-1][1] in (r'cmd', r'shell', r'ansible.builtin.shell'):
+                    # Special casing for shell commands
+                    # TODO technically speaking we should only do this within the 'shell' module, not the 'command' module.
+                    error |= check_str(v, pos_stack)
+                    # TODO should probably be careful about complaining about shell lexing errors if
+                    # the string is subject to Jinja expansion.
+                    error |= check_shell_command(v, pos_stack)
                 else:
                     error |= check_str(v, pos_stack)
                 state[-1] = (S_KEY, None)
