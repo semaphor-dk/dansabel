@@ -299,8 +299,8 @@ ANSIBLE_BUILTIN_FILTERS = set(sum({
         'json_query', ],
     '20400': [ 'strftime', 'urlsplit', ],
     '20500': ['flatten',],
-    # 20600: ['dict2items', 'random_mac', 'expandvars',],
-    # 20700: ['items2dict', 'subelements'],
+    '20600': ['dict2items', 'random_mac', 'expandvars',],
+    '20700': ['items2dict', 'subelements'],
 }.values(), []))
 
 # TODO detect currently installed ansible version or provide a way to configure per-repo?
