@@ -86,8 +86,11 @@ def __vt100_color(tag, text):
     if 'data' == tag: prefix= '\x1b[38:5:248:0m' # gray
     elif 'variable_begin' == tag or 'variable_end' == tag: prefix = '\x1b[38:5:91;1m' # purple
     elif 'operator' == tag: prefix = '\x1b[36;1m' # green
-    elif 'block_begin' == tag or \
-       'block_end' == tag: prefix = '\x1b[38:5:208;1m' # orange
+    elif tag in (
+            'block_begin',
+            'block_end',
+            'raw_begin',
+            'raw_end'): prefix = '\x1b[38:5:208;1m' # orange
     elif 'LEX_ERROR' == tag: prefix = '\x1b[38:5:217;1;41m'
     elif 'BOLD' == tag: prefix = '\x1b[1m'
     elif 'comment_begin' == tag or \
@@ -153,7 +156,8 @@ def tokens_match(left, right):
     left = left.rstrip('-').strip()
     right = right.lstrip('-').strip()
     return (left,right) in [ ('(',')'), ('[',']'), ('{','}'),
-                             ('{{','}}'), ('{%','%}'), ('{#','#}'), ]
+                             ('{{','}}'), ('{%','%}'), ('{#','#}'),
+                             ('{% raw %}', '{% endraw %}'), ]
 
 def is_scope_open(tok):
     if tok['tag'].endswith('_begin'): return True
