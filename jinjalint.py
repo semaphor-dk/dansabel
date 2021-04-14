@@ -10,6 +10,7 @@ import argparse
 import shlex
 
 verbosity = 0
+LAST_THRESHOLD = 3 # must be >=1
 
  # set to False to return success when there is no parser error,
  # but jinjalint had comments; this should be a cli switch:
@@ -173,7 +174,6 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
         if not annotations: # skip when there are no parser exceptions and no annotations
             if not verbosity:
                 return
-    LAST_THRESHOLD = 3 # must be >=1
     relevant_lines = set()
 
     # first we try to establish which lines we are interested in looking at:
@@ -583,8 +583,16 @@ def raw_scalar_generator(payload):
 def ruamel_generator(filename):
     try:
         with open(filename) as fd:
-            for z in ruamel.yaml.YAML(typ=r'safe').parse(fd):
-                yield z
+            yaml_obj = ruamel.yaml.YAML(typ=r'rt',pure=True)
+            if ruamel.yaml.version_info[0:2] < (0,15):
+                # backwards compatibility:
+                yield from yaml_obj.parse(fd)
+            else: # >=0.15 changed api:
+                _, parser = yaml_obj.get_constructor_parser(fd)
+                event = True
+                while event:
+                    event = parser.state()
+                    yield event
     # All exception handlers here must output a description, or at the very least
     # a backtrace:
     except ruamel.yaml.scanner.ScannerError as e:
@@ -619,8 +627,15 @@ def lint(filename):
 if '__main__' == __name__:
     a_parser = argparse.ArgumentParser()
     a_parser.add_argument('FILE', nargs='+')
-    a_parser.add_argument('-C', '--context-lines', type=int, help="NOT IMPLEMENT Number of context lines controls LAST_THRESHOLD")
+    a_parser.add_argument('-C', '--context-lines', type=int, help="Number of context lines controls LAST_THRESHOLD")
+    a_parser.add_argument('-q', '--quiet', action='store_true', help="No normal output to stdout")
     args = a_parser.parse_args()
+
+    if args.quiet:
+        output = lambda *x: None
+
+    if args.context_lines:
+        LAST_THRESHOLD = args.context_lines
 
     error = False
     # we do not support any flags, so for now we just:

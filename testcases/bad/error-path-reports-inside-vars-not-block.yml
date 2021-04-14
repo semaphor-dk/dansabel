@@ -1,0 +1,29 @@
+---
+# roles/ssh_no_passwords/tasks/main.yml
+
+- name: make sure authorized_keys exists
+  vars:
+    ssh_config_dirs:
+      - { path: "/etc/ssh/keys-root" } # VMware
+      - { path: "/root/.ssh" }
+  block:
+    - name: make config dirs
+      with_items: "{{ ssh_config_dirs }}"
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: root
+        group: root
+        mode: '0700' # u=rwx,go=
+    - name: add users
+      with_nested:
+        - "{{ ssh_config_dirs }}"
+        - "{{ users }"
+      lineinfile:
+        owner: root
+        group: root
+        create: yes
+        mode: "0600" # u=rw,go=
+        path: "{{ item.0 }}"
+        line: "{{ users[item.1].key }}"
+- z: y {{}}

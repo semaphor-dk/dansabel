@@ -1,0 +1,8 @@
+---
+myfor: '{% for i in [1,2,3] %}{{ i }}{% endfor %}'
+
+amazing: |
+  {% set for = [4,5] %}
+  {% for in in for %}
+  {{ in }}
+  {% endfor %}

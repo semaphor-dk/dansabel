@@ -1,0 +1,20 @@
+---
+# this is interesting - why \n in line 7 ??? :
+#   5:4  ┏━━━━ variable_begin: {{
+#                ⚞ This may be an unclosed block?⚟
+#   5:6  ┣━━━━━━━━ whitespace: ↵ ↵   \n  ↵ 
+#   9:4  ┣━━━━━━━━━━━━━━ name: a ↵  ↵  ↵     
+#  12:6  ┣━━━━━━ NOT_CONSUMED: 'xsy\n
+# looks like we have a whitespace token that contains ' \n' and we're only looking for '\n' when substituting
+
+x: |
+  {{
+
+    
+  
+  a
+
+
+    'xsy
+    a
+    b

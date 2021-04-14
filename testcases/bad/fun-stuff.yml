@@ -1,0 +1,68 @@
+---
+foerste: # 4
+  a:
+    # wrong because missing }
+    AA: "{{ foerste } a {{ AA }}"
+
+# this is a comment containing {{ broken jinja2 :-) enjoy
+
+# b and c are valid jinja2:
+# TODO but we should probably detect this mistake in our parser?
+b: "{ xx }} b: {{ hah }}"
+c: "{{ c: }} xx { hah }}"
+
+anden: # 5
+  d: "{ anden } d: {{ hov }"
+  e: "{{ anden ( e ) }"
+
+tredje: # 7
+  f: "{ tredje: f }}"
+g: "{{ g:"
+h: "h:{% }}"
+
+haha: # 11
+  foo: |+
+    haha-foo {{
+    haha-foo }} haha{{:
+      }}foo
+  'haha{{:2': good
+  666: 'amdoing'
+  himma:
+    - aaa
+    - '{{bb haha:himma:1'
+    - cc'{{ valid {# comment here? #} }}'
+
+# this one is really nice, triggers both the parser and the lexer:
+checkie: |
+  \% test {{ hey }}
+  {{ {{ name | lookup('arg') }}
+  {# comment so {{ that's fine #}
+  {: what is this :}
+  {% raw %}  {{% great {{ }  {% endraw %}
+  okay
+
+zzz: |
+  {{ hey | joe() }}
+  {{
+
+# Illustrates why we need the real yaml parser:
+ansiblething:
+- name: Check out src from Git
+  uses: actions/checkout@v2
+  with:
+    # Get shallow Git history (default) for tag creation events
+    # but have a complete clone for any other workflows.
+    # Both options fetch tags but since we're going to remove
+    # one from HEAD in non-create-tag workflows, we need full
+    # history for them.
+    fetch-depth: >-
+      ${{
+        (
+          github.event_name == 'create' &&
+          github.event.ref_type == 'tag'
+        ) &&
+        1 || 0
+      }}
+
+# this also breaks our parser, but seems to work ok in ansible:
+# have: {{ fun }}
