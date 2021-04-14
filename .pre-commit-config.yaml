@@ -1,6 +1,0 @@
--   id: dansable
-    name: dansable 
-    description: Checks and lints ansible projects
-    entry: pre-commit.sh
-    language: script
-    types: [text]

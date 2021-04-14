@@ -45,6 +45,12 @@ The script will match the extensions of modified files and call out various othe
 - The `ansible-lint` tool to lint YAML files (`.yml`)
 - The linter script contained in this repository to validate YAML files (`.yml`) and Jinja templates (contained in the YAML files or inside `templates/` directories, as used by Ansible).
 
+### pre-commit.com
+
+The project exposes a number of hooks for use with the [pre-commit.com](https://pre-commit.com/) framework:
+- `dansabel-ansible`: Parse/lint YAML files and Jinja2 templates (`*.yml`, `*.j2`, `/templates/*`)
+- `dansabel-all`: Includes `dansabel-ansible` and additionally runs `jq` on `.json` files, `shellcheck` on `.sh`, `pylint3` on `.py`.
+
 ## Installation
 
 A number of prerequisites are needed:
