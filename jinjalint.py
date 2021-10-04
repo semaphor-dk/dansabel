@@ -295,19 +295,24 @@ JINJA_BUILTIN_TESTS = set(['boolean', 'even', 'in', 'mapping', 'sequence',
                            'escaped', 'gt', 'lt', 'sameas', 'upper'])
 # TODO:   abs
 # https://docs.ansible.com/ansible/latest/user_guide/playbooks_tests.html
+# https://github.com/ansible/ansible/blob/devel/lib/ansible/plugins/test/core.py#L235
 ANSIBLE_BUILTIN_TESTS = set(sum({
-    '20000': ['regex', 'failed', 'search', 'match', 'changed', 'succeeded', 'skipped'],
-    '20100': ['superset', 'subset', 'success', 'change', 'skip'],
+    '20000': ['regex', 'failed', 'search', 'match', 'changed', 'succeeded', 'skipped',
+              'finished', 'started', 'unreachable','reachable', # not sure where docs for these are
+    ],
+    '20100': ['superset', 'subset', 'success', 'change', 'skip',
+              'version_compare',],
     '20400': ['all','any'],
     '20500': ['abs', 'directory', 'exists', 'file', 'link', 'mount', 'same_file', 'version'],
     '20800': ['contains'],
-    '21000': ['vault_encrypted', 'truthy', 'falsy'],
+    '21000': ['vault_encrypted', 'truthy', 'falsy',]
 }.values(), []))
 
 JINJA_BUILTIN_FILTERS = set([
  'abs', 'float', 'lower', 'round', 'tojson', 'attr', 'forceescape', 'map', 'safe', 'trim', 'batch', 'format', 'max', 'select', 'truncate', 'capitalize', 'groupby', 'min', 'selectattr', 'unique', 'center', 'indent', 'pprint', 'slice', 'upper', 'default', 'int', 'random', 'sort', 'urlencode', 'dictsort', 'join', 'reject', 'string', 'urlize', 'escape', 'last', 'rejectattr', 'striptags', 'wordcount', 'filesizeformat', 'length', 'replace', 'sum', 'wordwrap', 'first', 'list', 'reverse', 'title', 'xmlattr', ])
 
 # TODO should keep track of required/positional/keyword args and ansible versions these exist in:
+# https://github.com/ansible/ansible/blob/devel/lib/ansible/plugins/filter/core.py#L572
 ANSIBLE_BUILTIN_FILTERS = set(sum({
     # introduced in <= ansible v2.3:
     '20300': [
@@ -323,7 +328,7 @@ ANSIBLE_BUILTIN_FILTERS = set(sum({
         'json_query', ],
     '20400': [ 'strftime', 'urlsplit', ],
     '20500': ['flatten',
-              'human_readable', 'human_to_bytes', # TODO not sure when this was introduced
+              'md5', 'sha1', 'split', 'regex_findall', 'fileglob', 'from_yaml_all', 'human_readable', 'human_to_bytes', # TODO not sure when these were introduced
     ],
     '20600': ['dict2items', 'random_mac', 'expandvars',],
     '20700': ['items2dict', 'subelements'],
