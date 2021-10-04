@@ -1,0 +1,22 @@
+---
+# 5:4  ┏━━━━ variable_begin: {{
+# 5:6  ┣━━━━━━━━ whitespace:
+# 5:7  ┃ ┏━━━━━━━━━━━━━ operator: [
+# 5:8  ┃ ┣━━━━━━━━━━━━━━ integer: 1
+# 5:9  ┃ ┣━━━━━━━━━━━━━ operator: ,
+# 5:10 ┃ ┣━━━━━━━━━━━━━━ integer: 2
+# 5:11 ┃ ┗━━━━━━━━━━━━━ operator: ]
+# 5:12 ┣━━━━━━━━ whitespace:
+# 5:13 ┣━━━━━━━━━━ operator: |
+# 5:14 ┣━━━━━━━━ whitespace:
+# 5:15 ┣━━━━━━━━━━━━━━ name: first
+# 5:20 ┣━━━━━━━━ whitespace:
+# 5:21 ┣━━━━━━━━━━━━━━ name: is
+# 5:23 ┣━━━━━━━━ whitespace:
+# 5:24 ┣━━━━━━━━━━━━━━ name: strin
+#              ⚞ Not a builtin Test? Maybe: string, in⚟
+# 5:29 ┣━━━━━━━━ whitespace:
+# 5:30 ┗━━━━━━ variable_end: }}
+
+x: |
+  {{ [1,2] | first is strin }}

@@ -285,6 +285,25 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
                    Colored(lexer_e.message, 'LEX_ERROR'), sep=f' {VERTICAL_PIPE} ')
         output(Colored(HORIZONTAL_PIPE * OUT_COLS, 'string'))
 
+# "XXX is YYY(...)" where YYY is a test and ... is zero or more arguments:
+# https://jinja.palletsprojects.com/en/3.0.x/templates/#builtin-tests
+JINJA_BUILTIN_TESTS = set(['boolean', 'even', 'in', 'mapping', 'sequence',
+                           'callable', 'false', 'integer', 'ne', 'string',
+                           'defined', 'filter', 'iterable', 'none', 'test',
+                           'divisibleby', 'float', 'le', 'number', 'true',
+                           'eq', 'ge', 'lower', 'odd', 'undefined',
+                           'escaped', 'gt', 'lt', 'sameas', 'upper'])
+# TODO:   abs
+# https://docs.ansible.com/ansible/latest/user_guide/playbooks_tests.html
+ANSIBLE_BUILTIN_TESTS = set(sum({
+    '20000': ['regex', 'failed', 'search', 'match', 'changed', 'succeeded', 'skipped'],
+    '20100': ['superset', 'subset', 'success', 'change', 'skip'],
+    '20400': ['all','any'],
+    '20500': ['abs', 'directory', 'exists', 'file', 'link', 'mount', 'same_file', 'version'],
+    '20800': ['contains'],
+    '21000': ['vault_encrypted', 'truthy', 'falsy'],
+}.values(), []))
+
 JINJA_BUILTIN_FILTERS = set([
  'abs', 'float', 'lower', 'round', 'tojson', 'attr', 'forceescape', 'map', 'safe', 'trim', 'batch', 'format', 'max', 'select', 'truncate', 'capitalize', 'groupby', 'min', 'selectattr', 'unique', 'center', 'indent', 'pprint', 'slice', 'upper', 'default', 'int', 'random', 'sort', 'urlencode', 'dictsort', 'join', 'reject', 'string', 'urlize', 'escape', 'last', 'rejectattr', 'striptags', 'wordcount', 'filesizeformat', 'length', 'replace', 'sum', 'wordwrap', 'first', 'list', 'reverse', 'title', 'xmlattr', ])
 
@@ -303,12 +322,15 @@ ANSIBLE_BUILTIN_FILTERS = set(sum({
         'd', # d() is an alias for default(), not sure if that's from ansible or jinja
         'json_query', ],
     '20400': [ 'strftime', 'urlsplit', ],
-    '20500': ['flatten',],
+    '20500': ['flatten',
+              'human_readable', 'human_to_bytes', # TODO not sure when this was introduced
+    ],
     '20600': ['dict2items', 'random_mac', 'expandvars',],
     '20700': ['items2dict', 'subelements'],
 }.values(), []))
 
 # TODO detect currently installed ansible version or provide a way to configure per-repo?
+BUILTIN_TESTS = JINJA_BUILTIN_TESTS.union(ANSIBLE_BUILTIN_TESTS)
 BUILTIN_FILTERS = JINJA_BUILTIN_FILTERS.union(ANSIBLE_BUILTIN_FILTERS)
 
 def parse_lexed(lexed):
@@ -330,7 +352,7 @@ def parse_lexed(lexed):
             for next in lexed[i + 1:]: # skipping whitespace, TODO comments?
                 if next['tag'] in ('whitespace',): continue
                 if 'name' == next['tag']:
-                    if token_text(next) in BUILTIN_FILTERS: continue
+                    if token_text(next) in BUILTIN_FILTERS: break
                     suggest = ', '.join(difflib.get_close_matches(
                         token_text(next), BUILTIN_FILTERS, 2,cutoff=0.1))
                     recommendations.append({
@@ -354,6 +376,16 @@ def parse_lexed(lexed):
                           ' at ' + lexed_loc(cand[0]) + '?',
                           related=[cand[0]] # mark for display
                           )
+        elif 'name' == tok['tag'] and token_text(tok) == 'is':
+            for next in lexed[i+1:]:
+                if next['tag'] in ('whitespace',): continue
+                if token_text(next) in BUILTIN_TESTS: break
+                suggest = ', '.join(difflib.get_close_matches(
+                    token_text(next), BUILTIN_TESTS, 2,cutoff=0.1))
+                recommendations.append({'tok': next,
+                                        'related_tokens': [tok],
+                                        'comment': 'Not a builtin Test? Maybe: ' + suggest})
+                break
     if begins:
         # TODO only warn if there's no lexer error?
         #if not any(filter(lambda x: 'NOT_CONSUMED' == x['tag'] and '}' in token_text(x), lexed)):

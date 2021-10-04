@@ -1,0 +1,16 @@
+---
+# https://jinja.palletsprojects.com/en/3.0.x/templates/#builtin-tests
+# note that Ansible defines a number of additional tests,
+# like "regex()".
+# The tests below pass for the moment, but we do not check arity of the arguments,
+# nor do we check the type of inputs, so we may want to add additional checks in
+# the future.
+
+x: |
+  {{ [1,2] | first is string }}
+
+y: |
+  {{ [1,2] | first is in([2,3]) }}
+
+z: |
+  {{ [1,2] | first is regex("ab") }}
