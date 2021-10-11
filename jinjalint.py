@@ -677,6 +677,7 @@ if '__main__' == __name__:
     a_parser.add_argument('FILE', nargs='+')
     a_parser.add_argument('-C', '--context-lines', type=int, help="Number of context lines controls LAST_THRESHOLD")
     a_parser.add_argument('-q', '--quiet', action='store_true', help="No normal output to stdout")
+    a_parser.add_argument('-v', '--verbose', action='store_true', help="Print verbose output")
     args = a_parser.parse_args()
 
     if args.quiet:
@@ -684,6 +685,8 @@ if '__main__' == __name__:
 
     if args.context_lines:
         LAST_THRESHOLD = args.context_lines
+    if args.verbose:
+        verbosity = args.verbose
 
     error = False
     # we do not support any flags, so for now we just:
