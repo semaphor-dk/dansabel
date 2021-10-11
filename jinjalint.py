@@ -348,6 +348,17 @@ def parse_lexed(lexed):
             recommendations.append({'tok': token, 'comment': comment, 'related_tokens': related})
         ## This looks for "filters", aka tag {name} following {operator "|"}:
         if is_scope_open(tok):
+            if tok['tag'] == 'block_begin':
+                for next in lexed[i + 1:]:
+                    if next['tag'] in ('whitespace',): continue
+                    if token_text(next) == 'if':
+                        begins.append(next)
+                    elif token_text(next) == 'elif':
+                        begins.pop() # should be the if
+                        begins.append(next)
+                    elif token_text(next) == 'endif':
+                        begins.pop()
+                    break
             begins.append(tok)
         elif is_scope_close(tok):
             this_token_closed = begins.pop() # TODO should pop last matching type; anything else is an error
@@ -471,7 +482,7 @@ def check_str(yaml_node, pos_stack):
     annotations = parse_lexed(lexed)
     print_lexed_debug(lexed, node_path, parse_e, lexer_e, annotations=annotations,
                       debug=False)
-    if annotations or (verbosity and len(lexed)>1):
+    if annotations or (verbosity and len(lexed)>1) or not isinstance(parse_e, Target):
         output('\n' + '~' * OUT_COLS) # separate the inline view from per-token listing
         print_lexed_debug(lexed, node_path, parse_e, lexer_e,
                           annotations=annotations, debug=True)
