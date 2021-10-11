@@ -97,8 +97,8 @@ def __vt100_color(tag, text):
     elif 'comment_begin' == tag or \
          'comment' == tag or \
          'comment_end' == tag: prefix = '\x1b[38:5:165m' # magenta/pink
-    elif 'integer' == tag: prefix = '\x1b[38:5:108;1m' # white fg green bg
-    elif 'name' == tag: prefix = '\x1b[38:5:10:20;1m' # green (no bg)
+    elif tag in ('integer','IF'): prefix = '\x1b[38:5:108;1m' # white fg green bg
+    elif tag in ('name', 'FOR'): prefix = '\x1b[38:5:10:20;1m' # green (no bg)
     elif 'string' == tag: prefix = '\x1b[38:5:197:0;1m' # red-ish
     elif 'whitespace' == tag or \
        'RESET' == tag: prefix = RESET_COLOR
@@ -201,16 +201,28 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
         relevant_lines.update(range(0, lexed[-1]['lines'][-1]['line']+2))
 
     open_tag_stack = []
+    next_scope_transition = []
     current_line = 0
     linebuf = Colored('') # buffers one line of output
     last_printed = 0
-    for tok in lexed:
+    for idx, tok in enumerate(lexed):
         if is_scope_open(tok):
+            nextnwsp = first_non_whitespace(lexed[idx+1:])
+            if nextnwsp and nextnwsp['tag'] == 'name':
+                if token_text(nextnwsp) in ('if',): # elif stays in same scope
+                    next_scope_transition.append((len(open_tag_stack),'IF'))
+                elif token_text(nextnwsp) in ('for',):
+                    next_scope_transition.append((len(open_tag_stack),'FOR'))
+                elif open_tag_stack:
+                    if (token_text(nextnwsp) == 'endfor' and open_tag_stack[-1]=='FOR') or (
+                            token_text(nextnwsp) == 'endif' and open_tag_stack[-1]=='IF'):
+                        open_tag_stack = open_tag_stack[:-1]
             open_tag_stack.append(tok['tag'])
         indent_level = len(open_tag_stack)
         offset = 14 + 2*(indent_level)
         if is_scope_close(tok):
             open_tag_stack = open_tag_stack[:-1] # .pop() without exception
+
         for lin in tok['lines']:
             is_new_line = (lin['line'] != current_line)
             if is_new_line:
@@ -271,6 +283,13 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
                     linebuf += '\n' + ' '  * offset
                     linebuf += Colored(msg, 'comment')
             if 'NOT_CONSUMED' == tok['tag']: break # only print the first unlexed line
+        # we're still looping over tokens, here we effectuate the changed scope when leaving a block:
+        if idx-1 >= 0 and is_scope_close(first_non_whitespace(lexed[idx-1::-1])):
+            for nst_idx, (scope_len, typ) in enumerate(next_scope_transition):
+                if len(open_tag_stack) == scope_len:
+                    open_tag_stack.append(typ)
+                    del next_scope_transition[nst_idx]
+
     if current_line in relevant_lines:
         output(linebuf, end='')
     if debug: # display with syntax highlighting inline
@@ -338,6 +357,11 @@ ANSIBLE_BUILTIN_FILTERS = set(sum({
 BUILTIN_TESTS = JINJA_BUILTIN_TESTS.union(ANSIBLE_BUILTIN_TESTS)
 BUILTIN_FILTERS = JINJA_BUILTIN_FILTERS.union(ANSIBLE_BUILTIN_FILTERS)
 
+def first_non_whitespace(tok_list):
+    for tok in tok_list:
+        if tok['tag'] in (r'whitespace',): continue
+        return tok
+
 def parse_lexed(lexed):
     begins = []
     recommendations = []
@@ -349,16 +373,25 @@ def parse_lexed(lexed):
         ## This looks for "filters", aka tag {name} following {operator "|"}:
         if is_scope_open(tok):
             if tok['tag'] == 'block_begin':
-                for next in lexed[i + 1:]:
-                    if next['tag'] in ('whitespace',): continue
+                next = first_non_whitespace(lexed[i+1:])
+                if next:
                     if token_text(next) == 'if':
                         begins.append(next)
+                    elif token_text(next) == 'for':
+                        begins.append(next)
                     elif token_text(next) == 'elif':
-                        begins.pop() # should be the if
+                        popped = begins.pop()
+                        if token_text(popped) not in ('elif'):
+                            recommend(f'elif must not end a "{token_text(popped)}" scope', token=next, related=[popped])
                         begins.append(next)
                     elif token_text(next) == 'endif':
-                        begins.pop()
-                    break
+                        popped = begins.pop() # TODO should be a 'for'
+                        if token_text(popped) not in ('if', 'elif'):
+                            recommend(f'endif must not end a "{token_text(popped)}" scope', token=next, related=[popped])
+                    elif token_text(next) == 'endfor':
+                        popped = begins.pop() # TODO should be a 'for'
+                        if token_text(popped) != 'for':
+                            recommend(f'endfor must not end a "{token_text(popped)}" scope', token=next, related=[popped])
             begins.append(tok)
         elif is_scope_close(tok):
             this_token_closed = begins.pop() # TODO should pop last matching type; anything else is an error
