@@ -8,6 +8,6 @@
     name: dansabel-ansible
     description: Checks and lints Ansible projects (YAML/Jinja2 only)
     entry: jinjalint.py
-    language: script
+    language: python
     types: [file]
     files: (\.yml|\.j2)$|/templates/.*

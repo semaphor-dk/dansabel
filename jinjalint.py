@@ -18,6 +18,8 @@ FAIL_WHEN_ONLY_ANNOTATIONS = True
 
 USE_COLORS = False
 
+SEEN_NAMES = set()
+
 VERTICAL_PIPE = '┃'
 HORIZONTAL_PIPE = '━'
 UNICODE_DOT = '•'
@@ -397,6 +399,8 @@ def parse_lexed(lexed):
             this_token_closed = begins.pop() # TODO should pop last matching type; anything else is an error
             if not tokens_match(token_text(this_token_closed), token_text(tok)):
                 recommend('Unclosed block?', related=[this_token_closed])
+        if 'name' == tok['tag']:
+            SEEN_NAMES.add(token_text(tok))
         if 'operator' == tok['tag'] and token_text(tok) == '|':
             for next in lexed[i + 1:]: # skipping whitespace, TODO comments?
                 if next['tag'] in ('whitespace',): continue
@@ -726,4 +730,9 @@ if '__main__' == __name__:
     for filename in args.FILE:
         if '--' == filename: continue
         error |= lint(filename)
+    SEEN_NAMES.difference_update(BUILTIN_FILTERS)
+    SEEN_NAMES.difference_update(BUILTIN_TESTS)
+    SEEN_NAMES.difference_update({'endfor', 'for', 'is', 'set'})
+    if verbosity and SEEN_NAMES:
+        pass # print(SEEN_NAMES)
     sys.exit(error)
