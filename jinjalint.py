@@ -377,23 +377,28 @@ def parse_lexed(lexed):
             if tok['tag'] == 'block_begin':
                 next = first_non_whitespace(lexed[i+1:])
                 if next:
-                    if token_text(next) == 'if':
+                    next_text = token_text(next)
+                    if next_text == 'if':
                         begins.append(next)
-                    elif token_text(next) == 'for':
+                    elif next_text == 'for':
                         begins.append(next)
-                    elif token_text(next) == 'elif':
+                    elif next_text == 'elif':
                         popped = begins.pop()
                         if token_text(popped) not in ('elif'):
                             recommend(f'elif must not end a "{token_text(popped)}" scope', token=next, related=[popped])
                         begins.append(next)
-                    elif token_text(next) == 'endif':
-                        popped = begins.pop() # TODO should be a 'for'
-                        if token_text(popped) not in ('if', 'elif'):
-                            recommend(f'endif must not end a "{token_text(popped)}" scope', token=next, related=[popped])
-                    elif token_text(next) == 'endfor':
-                        popped = begins.pop() # TODO should be a 'for'
-                        if token_text(popped) != 'for':
-                            recommend(f'endfor must not end a "{token_text(popped)}" scope', token=next, related=[popped])
+                    elif next_text in ('endif', 'endfor'):
+                        # we have endif/endfor, ensure they close the right scope:
+                        popped = None
+                        try:
+                            popped = begins.pop() # TODO should be a 'endif'
+                        except IndexError:
+                            recommend(f'block closure, but no block scope is open',
+                                      token=next, related=[tok])
+                        if popped:
+                            if (('endfor' == next_text and token_text(popped) not in ('for',)) or
+                                ('endif'  == next_text and token_text(popped) not in ('if','elif'))):
+                                recommend(f'{next_text} cannot not end a "{token_text(popped)}" scope', token=next, related=[popped])
             begins.append(tok)
         elif is_scope_close(tok):
             this_token_closed = begins.pop() # TODO should pop last matching type; anything else is an error
