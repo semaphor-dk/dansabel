@@ -47,17 +47,31 @@ The script will match the extensions of modified files and call out various othe
 
 ### pre-commit.com
 
-The project exposes a number of hooks for use with the [pre-commit.com](https://pre-commit.com/) framework:
-- `dansabel-ansible`: Parse/lint YAML files and Jinja2 templates (`*.yml`, `*.j2`, `/templates/*`)
-- `dansabel-all`: Includes `dansabel-ansible` and additionally runs `jq` on `.json` files, `shellcheck` on `.sh`, `pylint3` on `.py`.
+The project exposes a hook for use with the [pre-commit.com](https://pre-commit.com/) framework:
+- `dansabel`: Parse/lint YAML files and Jinja2 templates (`*.yml`, `*.j2`, `/templates/*`)
 
 ## Installation
 
-A number of prerequisites are needed:
-```shell
-sudo apt install jq shellcheck python3-ruamel.yaml ansible-lint
+#### Installation: [https://pre-commit.com](pre-commit.com)
+
+An example of a `.pre-commit-config.yaml` for your project (replace `REPLACEME` with this commit id or `HEAD`):
+```yaml
+repos:
+- repo: https://github.com/semaphor-dk/dansabel
+  rev: REPLACEME
+  hooks:
+  - id: dansabel
 ```
 
+#### Installation: OS deps/no virtualenv
+
+A number of prerequisites are needed:
+```shell
+sudo apt install jq shellcheck ansible-lint
+pip install https://github.com/semaphor-dk/dansabel
+```
+
+#### Installation: Git config
 You can either install it on a per-repository basis by making a symlink from `.git/hooks/pre-commit` to `pre-commit.sh` in this directory, or as a global hook across all your git repositories.
 
 To configure a hook for a given repository:

@@ -1,11 +1,5 @@
--   id: dansabel-all
-    name: dansabel-all
-    description: Checks and lints Ansible projects
-    entry: pre-commit.sh
-    language: script
-
--   id: dansabel-ansible
-    name: dansabel-ansible
+-   id: dansabel
+    name: dansabel
     description: Checks and lints Ansible projects (YAML/Jinja2 only)
     entry: jinjalint.py
     language: python
