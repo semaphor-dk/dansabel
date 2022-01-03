@@ -4,8 +4,7 @@ from setuptools import setup, find_packages
 setup(
     name='dansabel',
     version='1.1',
-    #requires=['ruamel.yaml', 'jinja2'],
-    install_requires=['ruamel.yaml', 'jinja2'],
+    install_requires=['ruamel.yaml', 'jinja2', 'ansible'],
     author='Semaphor',
     author_email='info@semaphor.dk',
     description='Ansible YAML/Jinja2 static analysis tool and pre-commit hook',

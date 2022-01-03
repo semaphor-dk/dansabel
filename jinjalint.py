@@ -8,6 +8,18 @@ import difflib # used for misspelled keyword suggestions
 import textwrap
 import argparse
 import shlex
+import importlib
+import ansible.plugins.filter
+import ansible.plugins.test
+import pkgutil
+try:
+    import ansible_collections.community.general.plugins.filter
+    SKIP_COMMUNITY = False
+except:
+    SKIP_COMMUNITY = True
+
+# from ansible_collections.ansible_release import ansible_version
+# ^- retrieve the ansible version we are checking against
 
 verbosity = 0
 LAST_THRESHOLD = 3 # must be >=1
@@ -308,54 +320,35 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
 
 # "XXX is YYY(...)" where YYY is a test and ... is zero or more arguments:
 # https://jinja.palletsprojects.com/en/3.0.x/templates/#builtin-tests
-JINJA_BUILTIN_TESTS = set(['boolean', 'even', 'in', 'mapping', 'sequence',
-                           'callable', 'false', 'integer', 'ne', 'string',
-                           'defined', 'filter', 'iterable', 'none', 'test',
-                           'divisibleby', 'float', 'le', 'number', 'true',
-                           'eq', 'ge', 'lower', 'odd', 'undefined',
-                           'escaped', 'gt', 'lt', 'sameas', 'upper'])
-# TODO:   abs
+JINJA_BUILTIN_TESTS = set(jinja2.tests.TESTS)
+
 # https://docs.ansible.com/ansible/latest/user_guide/playbooks_tests.html
 # https://github.com/ansible/ansible/blob/devel/lib/ansible/plugins/test/core.py#L235
-ANSIBLE_BUILTIN_TESTS = set(sum({
-    '20000': ['regex', 'failed', 'search', 'match', 'changed', 'succeeded', 'skipped',
-              'finished', 'started', 'unreachable','reachable', # not sure where docs for these are
-    ],
-    '20100': ['superset', 'subset', 'success', 'change', 'skip',
-              'version_compare',],
-    '20400': ['all','any'],
-    '20500': ['abs', 'directory', 'exists', 'file', 'link', 'mount', 'same_file', 'version'],
-    '20800': ['contains'],
-    '21000': ['vault_encrypted', 'truthy', 'falsy',]
-}.values(), []))
+ANSIBLE_BUILTIN_TESTS = set().union(*[
+    set(importlib.import_module('ansible.plugins.test.' + name).TestModule().tests())
+    for loader, name, is_pkg in pkgutil.walk_packages(ansible.plugins.test.__path__)
+])
 
-JINJA_BUILTIN_FILTERS = set([
- 'abs', 'float', 'lower', 'round', 'tojson', 'attr', 'forceescape', 'map', 'safe', 'trim', 'batch', 'format', 'max', 'select', 'truncate', 'capitalize', 'groupby', 'min', 'selectattr', 'unique', 'center', 'indent', 'pprint', 'slice', 'upper', 'default', 'int', 'random', 'sort', 'urlencode', 'dictsort', 'join', 'reject', 'string', 'urlize', 'escape', 'last', 'rejectattr', 'striptags', 'wordcount', 'filesizeformat', 'length', 'replace', 'sum', 'wordwrap', 'first', 'list', 'reverse', 'title', 'xmlattr', ])
+JINJA_BUILTIN_FILTERS = set(jinja2.filters.FILTERS)
 
-# TODO should keep track of required/positional/keyword args and ansible versions these exist in:
-# https://github.com/ansible/ansible/blob/devel/lib/ansible/plugins/filter/core.py#L572
-ANSIBLE_BUILTIN_FILTERS = set(sum({
-    # introduced in <= ansible v2.3:
-    '20300': [
-        'mandatory', 'ternary', 'bool', 'lookup', 'combine', 'map', 'permutations', 'product',
-        'combinations', 'random', 'shuffle', 'unique', 'union', 'intersect', 'difference',
-        'symmetric_difference', 'log', 'pow', 'root', 'hash', 'checksum', 'password_hash',
-        'comment', 'to_datetime', 'to_uuid', 'regex_escape', 'regex_search', 'regex_replace',
-        'basename', 'win_basename', 'win_splitdrive', 'dirname', 'win_dirname', 'expanduser',
-        'realpath', 'relpath', 'splitext', 'path_join', 'quote', 'b64decode', 'b64encode',
-        'from_json', 'to_json', 'from_nice_json', 'to_nice_json', 'from_yaml', 'to_yaml',
-        'from_nice_yaml', 'to_nice_yaml', 'type_debug', 'zip', 'zip_longest',
-        'd', # d() is an alias for default(), not sure if that's from ansible or jinja
-        'json_query', ],
-    '20400': [ 'strftime', 'urlsplit', ],
-    '20500': ['flatten',
-              'md5', 'sha1', 'split', 'regex_findall', 'fileglob', 'from_yaml_all', 'human_readable', 'human_to_bytes', # TODO not sure when these were introduced
-    ],
-    '20600': ['dict2items', 'random_mac', 'expandvars',],
-    '20700': ['items2dict', 'subelements'],
-}.values(), []))
+ANSIBLE_BUILTIN_FILTERS = set()
+if not SKIP_COMMUNITY:
+    ANSIBLE_BUILTIN_FILTERS = ANSIBLE_BUILTIN_FILTERS.union(*[
+        set(importlib.import_module('ansible_collections.community.general.plugins.filter.' + name).FilterModule().filters())
+        for loader, name, is_pkg in pkgutil.walk_packages(ansible_collections.community.general.plugins.filter.__path__)
+    ])
+ANSIBLE_BUILTIN_FILTERS.update(*[
+    set(importlib.import_module('ansible.plugins.filter.' + name).FilterModule().filters())
+    for loader, name, is_pkg in pkgutil.walk_packages(ansible.plugins.filter.__path__)
+], {'lookup','query','now','undef'})
+# https://github.com/ansible/ansible/blob/2058ea59915655d71bf5bd9d3f7e318ffec3c658/lib/ansible/template/__init__.py#L649-L653
+# ^-- the hardcoded values above are currenty not accounted for.
 
-# TODO detect currently installed ansible version or provide a way to configure per-repo?
+# Here we find 'd', 'e', etc:
+mock_template_env = ansible.template.AnsibleEnvironment()
+ANSIBLE_BUILTIN_FILTERS.update(mock_template_env.filters)
+ANSIBLE_BUILTIN_TESTS.update(set(mock_template_env.tests))
+
 BUILTIN_TESTS = JINJA_BUILTIN_TESTS.union(ANSIBLE_BUILTIN_TESTS)
 BUILTIN_FILTERS = JINJA_BUILTIN_FILTERS.union(ANSIBLE_BUILTIN_FILTERS)
 
