@@ -8,6 +8,7 @@ import difflib # used for misspelled keyword suggestions
 import textwrap
 import argparse
 import shlex
+import json
 import importlib
 import ansible.plugins.filter
 import ansible.plugins.test
@@ -30,7 +31,7 @@ FAIL_WHEN_ONLY_ANNOTATIONS = True
 
 USE_COLORS = False
 
-SEEN_NAMES = set()
+EXTERNAL_VARIABLES = dict()
 
 VERTICAL_PIPE = '┃'
 HORIZONTAL_PIPE = '━'
@@ -317,6 +318,12 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
             output(f'{UNICODE_DOT} {node_path}', lexer_e.lineno, Colored('jinja lexer', 'LEX_ERROR'),
                    Colored(lexer_e.message, 'LEX_ERROR'), sep=f' {VERTICAL_PIPE} ')
         output(Colored(HORIZONTAL_PIPE * OUT_COLS, 'string'))
+    elif verbosity == 1:
+        # TODO == 1 prevents the double printing when verbosity>=2; this could be prettier.
+        output(Colored('\n' + HORIZONTAL_PIPE * OUT_COLS, 'string'))
+        output(f'{UNICODE_DOT} {node_path}')
+        output(Colored(HORIZONTAL_PIPE * OUT_COLS, 'string'))
+
 
 # "XXX is YYY(...)" where YYY is a test and ... is zero or more arguments:
 # https://jinja.palletsprojects.com/en/3.0.x/templates/#builtin-tests
@@ -397,8 +404,6 @@ def parse_lexed(lexed):
             this_token_closed = begins.pop() # TODO should pop last matching type; anything else is an error
             if not tokens_match(token_text(this_token_closed), token_text(tok)):
                 recommend('Unclosed block?', related=[this_token_closed])
-        if 'name' == tok['tag']:
-            SEEN_NAMES.add(token_text(tok))
         if 'operator' == tok['tag'] and token_text(tok) == '|':
             for next in lexed[i + 1:]: # skipping whitespace, TODO comments?
                 if next['tag'] in ('whitespace',): continue
@@ -464,10 +469,21 @@ def check_str(yaml_node, pos_stack):
     lexer_e.lineno = 0 # defined here because we may to lift an exc out of its scope
     node_path = get_node_path(pos_stack)
     try:
-        d = jinja2.sandbox.ImmutableSandboxedEnvironment().parse(source=s, name=node_path, filename='JINJA_TODO_FILENAME_SEEMS_UNUSED')
+        jinja_template = jinja2.sandbox.ImmutableSandboxedEnvironment().parse(source=s, name=node_path, filename='JINJA_TODO_FILENAME_SEEMS_UNUSED')
         # TODO good place to return False if we don't care about non-parser errors
     except jinja2.TemplateSyntaxError as parse_e_exc:
         parse_e = parse_e_exc
+    else:
+        # Parsing was successful. Here we do bookkeeping on variables needed / defined:
+        parsed_symbols = jinja2.idtracking.symbols_for_node(jinja_template)
+        #print(parsed_symbols.__dict__)
+        for ref in parsed_symbols.loads.values():
+            if 'resolve' == ref[0]:
+                # ref[1] contains the variable name of a variable that jinja
+                # would need to resolve from the environment.
+                filename = pos_stack[0][2].rstrip(':')
+                EXTERNAL_VARIABLES[filename] = EXTERNAL_VARIABLES.get(filename, set())
+                EXTERNAL_VARIABLES[filename].add(ref[1])
 
     # OK! Gloves off! We are going to run it through the lexer to retrieve
     # more information and hopefully be able to be helpful.
@@ -517,7 +533,7 @@ def check_str(yaml_node, pos_stack):
     annotations = parse_lexed(lexed)
     print_lexed_debug(lexed, node_path, parse_e, lexer_e, annotations=annotations,
                       debug=False)
-    if annotations or (verbosity and len(lexed)>1) or not isinstance(parse_e, Target):
+    if annotations or (verbosity>=2 and len(lexed)>1) or not isinstance(parse_e, Target):
         output('\n' + '~' * OUT_COLS) # separate the inline view from per-token listing
         print_lexed_debug(lexed, node_path, parse_e, lexer_e,
                           annotations=annotations, debug=True)
@@ -697,7 +713,7 @@ def ruamel_generator(filename):
 
 def lint(filename):
     try:
-        if filename.endswith('.yml'):
+        if filename.endswith('.yaml') or filename.endswith('.yml'):
             doc = ruamel_generator(filename)
         else: # assume it's raw jinja2, mock up AST nodes:
             doc = raw_scalar_generator(filename)
@@ -708,11 +724,17 @@ def lint(filename):
         return True # that did not go well, perhaps file not found or yaml parsing err
 
 if '__main__' == __name__:
-    a_parser = argparse.ArgumentParser()
+    a_parser = argparse.ArgumentParser(description='''
+List external variables used from Jinja:
+  jinjalint.py -qe ./*.j2 ./*.yml
+''')
     a_parser.add_argument('FILE', nargs='+')
     a_parser.add_argument('-C', '--context-lines', type=int, help="Number of context lines controls LAST_THRESHOLD")
     a_parser.add_argument('-q', '--quiet', action='store_true', help="No normal output to stdout")
-    a_parser.add_argument('-v', '--verbose', action='store_true', help="Print verbose output")
+    a_parser.add_argument('-v', '--verbose', action='count', help="""Print verbose output.
+-v prints all Jinja snippets, regardless of errors. -vv prints full AST for each Jinja node.""", default=0)
+    a_parser.add_argument('-e', '--external', action='store_true',
+                          help='''List external variables used. Use -q -e to only print this summary. Note that -e only works for files that can be parsed without errors.''')
     args = a_parser.parse_args()
 
     if args.quiet:
@@ -728,9 +750,12 @@ if '__main__' == __name__:
     for filename in args.FILE:
         if '--' == filename: continue
         error |= lint(filename)
-    SEEN_NAMES.difference_update(BUILTIN_FILTERS)
-    SEEN_NAMES.difference_update(BUILTIN_TESTS)
-    SEEN_NAMES.difference_update({'endfor', 'for', 'is', 'set'})
-    if verbosity and SEEN_NAMES:
-        pass # print(SEEN_NAMES)
+    if EXTERNAL_VARIABLES and (verbosity > 1 or args.external):
+        class SetEncoder(json.JSONEncoder):
+            '''https://stackoverflow.com/a/8230505'''
+            def default(self, obj):
+               if isinstance(obj, set): return sorted(list(obj))
+               return json.JSONEncoder.default(self, obj)
+        # TODO should this really be print() ?
+        print(json.dumps(EXTERNAL_VARIABLES, cls=SetEncoder))
     sys.exit(error)
