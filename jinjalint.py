@@ -596,7 +596,7 @@ S_VAL = 20
 S_SEQ = 30
 
 def check_val(doc, pos_stack, error=False):
-    state = [ (S_VAL,0) ] # list of tuples of state and data (used for list item counting)
+    state = [ (S_VAL,0,set()) ] # list of tuples of state and data (used for list item counting)
     while True:
         try:
             v = next(doc)
@@ -610,9 +610,10 @@ def check_val(doc, pos_stack, error=False):
         if isinstance(v, ruamel.yaml.events.ScalarEvent):
             if S_KEY == state[-1][0]:
                 error |= check_str(v, pos_stack)
-                state[-1] = (S_VAL, v.value)
+                state[-1] = (S_VAL, v.value, *state[-1][2:])
                 # 'name', 'when', etc need special handling
                 # here we change the name of the parent mapping itself (starts out as empty):
+                state[-1][2].add(v.value)
                 pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], v.value)
             elif S_SEQ == state[-1][0]:
                 error |= check_str(v, pos_stack)
@@ -638,7 +639,7 @@ def check_val(doc, pos_stack, error=False):
                     error |= check_shell_command(v, pos_stack)
                 else:
                     error |= check_str(v, pos_stack)
-                state[-1] = (S_KEY, None)
+                state[-1] = (S_KEY, None, *state[-1][2:])
         elif isinstance(v, ruamel.yaml.events.SequenceStartEvent) \
              or isinstance(v, ruamel.yaml.events.MappingStartEvent):
             # Usually when we reach here we will be in either S_SEQ (a list item)
@@ -646,19 +647,22 @@ def check_val(doc, pos_stack, error=False):
             # to S_KEY state in the parent context (because this mapping will be
             # said mapping):
             if state and state[-1][0] == S_VAL:
-                state[-1] = (S_KEY, state[-1][1])
+                state[-1] = (S_KEY, *state[-1][1:])
             elif state and state[-1][0] == S_SEQ:
                 pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], str(state[-1][1]))
                 next_idx = state[-1][1] + 1
                 state[-1] = (state[-1][0], next_idx)
             # Open a new context for the contents of this mapping:
             if isinstance(v, ruamel.yaml.events.SequenceStartEvent):
+                # for sequence states we track the list item offset
                 state.append( (S_SEQ, 0) )
                 pos_stack.append((v.start_mark, v.end_mark, 'SEQ'))
             else:
-                state.append((S_KEY, None))
+                # for mappings we track immediate child keys in a set
+                state.append((S_KEY, None, set()))
                 pos_stack.append((v.start_mark, v.end_mark, 'MAP'))
         elif isinstance(v, ruamel.yaml.events.MappingEndEvent):
+            error |= lint_ansible_directives(v, state, pos_stack)
             state.pop()
             pos_stack.pop()
         elif isinstance(v, ruamel.yaml.events.SequenceEndEvent):
@@ -674,6 +678,43 @@ def check_val(doc, pos_stack, error=False):
             output(pos_stack, f'\nBUG: please report this! unhandled YAML type {repr(v)}') #, file=os.stderr)
             error = True
     return error
+
+def lint_ansible_directives(v:ruamel.yaml.events.MappingEndEvent, state, pos_stack):
+    '''Lints Ansible directives by looking at keys and values.'''
+    filepath = pos_stack[0][2]
+    if '.github/workflows/' in filepath: return False # skip github triggers
+    if 'host_vars/' in filepath or 'group_vars/' in filepath or '/defaults/' in filepath:
+        return False # no error, we're looking for tasks
+
+    #### The rest of this function looks for cases where a task has more than one module:
+    if state[-1][0] != S_KEY: return False
+    sibling_keys = state[-1][2]
+    if 'name' not in sibling_keys: return False
+    for st in state[:-1]:
+        # here we loop over our ancestors and stop at the first "name:"
+        # the idea being that if they have a name:, we are probably not a task ourselves.
+        if st[0] == S_KEY and 'name' in st[2]:
+            if 'block' in st[2]:
+                # the exception is named block:s, we descend into those
+                continue
+            return False # no error
+    # TODO this list is probably not exhaustive:
+    ANSIBLE_EXPECTED_DUPLS = {
+        'with_items','with_dict','name','include_role','hosts','notify','loop','name',
+        'become', 'become_user','become_args',
+        'ignore_errors','when','tags', 'register',
+        'vars','block','args','loop_control','with_subelements', 'with_nested',
+        'with_together','environment','retries','run_once',
+        'failed_when','changed_when','delegate_to', 'until', 'delay',
+        'roles','pre_tasks','gather_facts', # TODO these two are not actually valid inside tasks,
+        # but listing them here lowers the number of false positives when accidentally
+        # running jinjalint.py on a playbook.
+    }
+    diff = sibling_keys.difference(ANSIBLE_EXPECTED_DUPLS)
+    if len(diff) > 1:
+        output(Colored('WARNING: potentially conflicting modules:', 'raw_begin'), diff, f'at {get_node_path(pos_stack[:-1])} lines { pos_stack[-1][0].line}-{ v.end_mark.line }')
+        return False # TODO: False for now so as to not break anything
+    return False
 
 def raw_scalar_generator(payload):
     '''Mock parse event generator for raw jinja2 files'''
