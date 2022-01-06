@@ -468,6 +468,15 @@ def check_str(yaml_node, pos_stack):
     lexer_e = Target()
     lexer_e.lineno = 0 # defined here because we may to lift an exc out of its scope
     node_path = get_node_path(pos_stack)
+
+    # TODO: '>' is "folded" style, where newlines are supposed to be replaced by spaces.
+    # in ruamel that means turning \x0a into \x07\x0a. I don't think Jinja2 cares,
+    # for parsing purposes, whether whitespace is \n or \07, but if we keep the newlines
+    # here, our locs will be correct; if we replace them with spaces we need to special
+    # case that in the line tracker below to keep the correspondence between Jinja2 errors
+    # and physical location. Thus our solution for now will be:
+    if yaml_node.style == '>':
+        s = s.replace('\x07', '')
     try:
         jinja_template = jinja2.sandbox.ImmutableSandboxedEnvironment().parse(source=s, name=node_path, filename='JINJA_TODO_FILENAME_SEEMS_UNUSED')
         # TODO good place to return False if we don't care about non-parser errors
@@ -476,7 +485,6 @@ def check_str(yaml_node, pos_stack):
     else:
         # Parsing was successful. Here we do bookkeeping on variables needed / defined:
         parsed_symbols = jinja2.idtracking.symbols_for_node(jinja_template)
-        #print(parsed_symbols.__dict__)
         for ref in parsed_symbols.loads.values():
             if 'resolve' == ref[0]:
                 # ref[1] contains the variable name of a variable that jinja
