@@ -1,0 +1,19 @@
+---
+
+- name: name
+  debug:
+    msg: "debug and copy are both modules"
+  copy:
+    src: a
+    dest: a
+
+- name: real
+  with_items:
+    - foo
+    - bar
+  register: yes
+  become: yes
+  become_user: root
+  ignore_errors: yes
+  debug:
+    msg: "this should be ok, no warning please"

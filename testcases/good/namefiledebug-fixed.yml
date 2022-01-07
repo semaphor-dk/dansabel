@@ -1,0 +1,24 @@
+---
+
+- name: name
+  copy:
+    src: a
+    dest: a
+
+- name: name2
+  debug:
+    msg: fixed thing
+
+- name: real
+  failed_when: True
+  delegate_to: localhost
+  delay: 1
+  with_items:
+    - foo
+    - bar
+  register: yes
+  become: yes
+  become_user: root
+  ignore_errors: yes
+  debug:
+    msg: "this should be ok, no warning please"

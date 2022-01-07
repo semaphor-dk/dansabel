@@ -699,12 +699,18 @@ def lint_ansible_directives(v:ruamel.yaml.events.MappingEndEvent, state, pos_sta
                 continue
             return False # no error
     # TODO this list is probably not exhaustive:
+    # TODO pull all the with_* from ansible/plugins/lookup/ etc
     ANSIBLE_EXPECTED_DUPLS = {
-        'with_items','with_dict','name','include_role','hosts','notify','loop','name',
+        'with_config','with_csvfile','with_dict','with_env','with_fileglob','with_file',
+        'with_first_found','with_indexed_items','with_ini','with_inventory_hostnames','with_items',
+        'with_lines','with_list','with_nested','with_password','with_pipe','with_random_choice',
+        'with_sequence','with_subelements','with_template','with_together','with_unvault','with_url',
+        'with_varnames','with_vars',
+        'name','hosts','notify','loop','name',
         'become', 'become_user','become_args',
         'ignore_errors','when','tags', 'register',
-        'vars','block','args','loop_control','with_subelements', 'with_nested',
-        'with_together','environment','retries','run_once',
+        'vars','args','loop_control',
+        'environment','retries','run_once',
         'failed_when','changed_when','delegate_to', 'until', 'delay',
         'roles','pre_tasks','gather_facts', # TODO these two are not actually valid inside tasks,
         # but listing them here lowers the number of false positives when accidentally
@@ -713,7 +719,7 @@ def lint_ansible_directives(v:ruamel.yaml.events.MappingEndEvent, state, pos_sta
     diff = sibling_keys.difference(ANSIBLE_EXPECTED_DUPLS)
     if len(diff) > 1:
         output(Colored('WARNING: potentially conflicting modules:', 'raw_begin'), diff, f'at {get_node_path(pos_stack[:-1])} lines { pos_stack[-1][0].line}-{ v.end_mark.line }')
-        return False # TODO: False for now so as to not break anything
+        return True
     return False
 
 def raw_scalar_generator(payload):
