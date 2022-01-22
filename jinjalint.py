@@ -46,6 +46,11 @@ except: # It's not going to be pretty, but OK:
     OUT_COLS = 72
     OUT_ROWS = 25
 
+
+# we will use the same immutable jinja environment instead of instantiating a new one
+# for each string field in each YAML file, for better performance.
+JINJA2_SANDBOX_ENVIRON = jinja2.sandbox.ImmutableSandboxedEnvironment()
+
 import collections
 class Colored(collections.UserString):
     def join(self, lst):
@@ -345,7 +350,7 @@ if not SKIP_COMMUNITY:
         for loader, name, is_pkg in pkgutil.walk_packages(ansible_collections.community.general.plugins.filter.__path__)
     ])
 ANSIBLE_BUILTIN_FILTERS.update(*[
-    set(importlib.import_module('ansible.plugins.filter.' + name).FilterModule().filters())
+    importlib.import_module('ansible.plugins.filter.' + name).FilterModule().filters()
     for loader, name, is_pkg in pkgutil.walk_packages(ansible.plugins.filter.__path__)
 ], {'lookup','query','now','undef'})
 # https://github.com/ansible/ansible/blob/2058ea59915655d71bf5bd9d3f7e318ffec3c658/lib/ansible/template/__init__.py#L649-L653
@@ -478,7 +483,7 @@ def check_str(yaml_node, pos_stack):
     if yaml_node.style == '>':
         s = s.replace('\x07', '')
     try:
-        jinja_template = jinja2.sandbox.ImmutableSandboxedEnvironment().parse(source=s, name=node_path, filename='JINJA_TODO_FILENAME_SEEMS_UNUSED')
+        jinja_template = JINJA2_SANDBOX_ENVIRON.parse(source=s, name=node_path, filename='JINJA_TODO_FILENAME_SEEMS_UNUSED')
         # TODO good place to return False if we don't care about non-parser errors
     except jinja2.TemplateSyntaxError as parse_e_exc:
         parse_e = parse_e_exc
@@ -510,7 +515,7 @@ def check_str(yaml_node, pos_stack):
     lex_col = yaml_node.start_mark.column + 1
     lexed = []
     try:
-        for rawtok in jinja2.sandbox.ImmutableSandboxedEnvironment().lex(source=s):
+        for rawtok in JINJA2_SANDBOX_ENVIRON.lex(source=s):
             consumed += len(rawtok[2])
             token = { 'tag': rawtok[1], 'lines': [] }
             for lineno, text in enumerate(rawtok[2].splitlines(True)):
