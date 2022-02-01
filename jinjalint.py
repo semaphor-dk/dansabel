@@ -680,7 +680,7 @@ def check_val(doc, pos_stack, error=False):
         elif isinstance(v, ruamel.yaml.events.StreamEndEvent):
             break
         else:
-            output(pos_stack, f'\nBUG: please report this! unhandled YAML type {repr(v)}') #, file=os.stderr)
+            output(pos_stack, f'\nBUG: please report this! unhandled YAML type {repr(v)}') #, file=sys.stderr)
             error = True
     return error
 
