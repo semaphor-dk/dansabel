@@ -1,0 +1,14 @@
+---
+# regression test for issue #14,
+# "conflicting modules connections,tasks"
+# https://github.com/semaphor-dk/dansabel/issues/14
+
+- name: show case for linting
+  hosts: localhost
+  gather_facts: no
+  connection: local
+
+  tasks:
+    - name: example task
+      debug:
+        msg: A placeholder.

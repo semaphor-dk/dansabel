@@ -717,9 +717,10 @@ def lint_ansible_directives(v:ruamel.yaml.events.MappingEndEvent, state, pos_sta
         'vars','args','loop_control',
         'environment','retries','run_once',
         'failed_when','changed_when','delegate_to', 'until', 'delay',
-        'roles','pre_tasks','gather_facts', # TODO these two are not actually valid inside tasks,
+        'roles','pre_tasks','gather_facts', 'connection', 'tasks', # TODO these are not actually valid inside tasks,
         # but listing them here lowers the number of false positives when accidentally
         # running jinjalint.py on a playbook.
+        # (we SHOULD be able to handle playbooks, since we are a commit hook for *.yml)
     }
     diff = sibling_keys.difference(ANSIBLE_EXPECTED_DUPLS)
     if len(diff) > 1:
