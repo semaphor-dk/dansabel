@@ -39,12 +39,10 @@ UNICODE_DOT = '•'
 
 try:
     assert os.isatty(sys.stdout.fileno())
-    OUT_COLS = os.get_terminal_size().columns
-    OUT_ROWS = os.get_terminal_size().lines
+    OUT_COLS = os.get_terminal_size().columns or 72 # it's 0 for ptys
     USE_COLORS = True
 except: # It's not going to be pretty, but OK:
     OUT_COLS = 72
-    OUT_ROWS = 25
 
 
 # we will use the same immutable jinja environment instead of instantiating a new one
@@ -314,14 +312,15 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
         output(linebuf, end='')
     if debug: # display with syntax highlighting inline
         output(Colored('\n' + HORIZONTAL_PIPE * OUT_COLS, 'string'))
-        if verbosity:
+        if parse_e or lexer_e:
+            if parse_e:
+                output(f'{UNICODE_DOT} {node_path}', parse_e.lineno, Colored('jinja parser', 'ERROR'),
+                    Colored(parse_e.message, 'ERROR'), sep=f' {VERTICAL_PIPE} ')
+            if lexer_e:
+                output(f'{UNICODE_DOT} {node_path}', lexer_e.lineno, Colored('jinja lexer', 'LEX_ERROR'),
+                    Colored(lexer_e.message, 'LEX_ERROR'), sep=f' {VERTICAL_PIPE} ')
+        else:
             output(f'{UNICODE_DOT} {node_path}')
-        if parse_e:
-            output(f'{UNICODE_DOT} {node_path}', parse_e.lineno, Colored('jinja parser', 'ERROR'),
-                   Colored(parse_e.message, 'ERROR'), sep=f' {VERTICAL_PIPE} ')
-        if lexer_e:
-            output(f'{UNICODE_DOT} {node_path}', lexer_e.lineno, Colored('jinja lexer', 'LEX_ERROR'),
-                   Colored(lexer_e.message, 'LEX_ERROR'), sep=f' {VERTICAL_PIPE} ')
         output(Colored(HORIZONTAL_PIPE * OUT_COLS, 'string'))
     elif verbosity == 1:
         # TODO == 1 prevents the double printing when verbosity>=2; this could be prettier.
