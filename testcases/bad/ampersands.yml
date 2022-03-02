@@ -1,0 +1,7 @@
+# TODO: would be nice if it could suggest using "and" instead
+# (this currently results in a lexer error: unexpected char '&')
+
+- name: install the most important things
+  when: "ansible_distribution == 'Debian' && 11 <= ansible_distribution_version|int"
+  apt:
+    name: emacs
