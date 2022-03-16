@@ -1,0 +1,14 @@
+# This is a test for issues/11:
+#
+# The regression test in testcases/bad/file-items-11.yml produces this warning:
+# WARNING: potentially conflicting modules: {'file', 'items'} at testcases/bad/file-items-11.yml:0 lines 3-10
+# but this file has the fix applied, correcting "items" to "with_items" and thus
+# should parse correctly:
+
+- name: make some directories
+  file:
+    type: directory
+    dest: "/tmp/directory_{{ item }}"
+  with_items:
+    - a
+    - b

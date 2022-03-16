@@ -1,0 +1,13 @@
+# This is a test for issues/11:
+# This Ansible stanza has typo: it should be "with_items"
+#
+# We produce this warning:
+# WARNING: potentially conflicting modules: {'file', 'items'} at testcases/bad/file-items-11.yml:0 lines 3-10
+
+- name: make some directories
+  file:
+    type: directory
+    dest: "/tmp/directory_{{ item }}"
+  items:
+    - a
+    - b
