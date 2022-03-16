@@ -1,0 +1,9 @@
+# this results in a parser error:
+# • testcases/bad/or-pipes.yml:0.when ┃ 4 ┃ jinja parser ┃ expected token 'name', got '|'
+# we add the recommendation:
+# 'Did you mean "or" ?'
+
+- name: install the most important things
+  when: "ansible_distribution == 'Debian' || 11 <= ansible_distribution_version|int"
+  apt:
+    name: emacs
