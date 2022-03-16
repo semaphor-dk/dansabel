@@ -4,6 +4,8 @@ Dansabel is a suite of static analysis tools for pre-flight checking of [Ansible
 
 The aim is to provide an extendable complement to [Ansible-Lint](https://ansible-lint.readthedocs.io/en/latest/), not a replacement.
 
+- [2022-02-25 - **Blog article about Dansabel with screenshots and examples**](https://blog.semaphor.dk/20220225T1408)
+
 It currently consists of:
 - a Python script that will use the YAML parser ([ruamel](https://pypi.org/project/ruamel.yaml/) as used in Ansible) to parse your YAML files
 - a simplistic [Jinja2](https://en.wikipedia.org/wiki/Jinja_(template_engine)) linter using the built-in Jinja2 lexer/parser to attempt to detect typos and errors
