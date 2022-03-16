@@ -373,6 +373,7 @@ def parse_lexed(lexed):
     recommendations = []
     for i in range(len(lexed)):
         tok = lexed[i]
+        tok_text = token_text(tok)
         this_token_closed = None # ref to popped begins[-1] if any
         def recommend(comment, token=lexed[i], related=[]):
             recommendations.append({'tok': token, 'comment': comment, 'related_tokens': related})
@@ -406,9 +407,9 @@ def parse_lexed(lexed):
             begins.append(tok)
         elif is_scope_close(tok):
             this_token_closed = begins.pop() # TODO should pop last matching type; anything else is an error
-            if not tokens_match(token_text(this_token_closed), token_text(tok)):
+            if not tokens_match(token_text(this_token_closed), tok_text):
                 recommend('Unclosed block?', related=[this_token_closed])
-        if 'operator' == tok['tag'] and token_text(tok) == '|':
+        if 'operator' == tok['tag'] and tok_text == '|':
             for next in lexed[i + 1:]: # skipping whitespace, TODO comments?
                 if next['tag'] in ('whitespace',): continue
                 if 'operator' == next['tag']:
@@ -416,7 +417,7 @@ def parse_lexed(lexed):
                         recommendations.append({'tok':next, 'related_tokens': [tok],
                                                 'comment': 'Did you mean "or" ?',})
                         break
-                if 'name' == next['tag']:
+                elif 'name' == next['tag']:
                     if token_text(next) in BUILTIN_FILTERS: break
                     suggest = ', '.join(difflib.get_close_matches(
                         token_text(next), BUILTIN_FILTERS, 2,cutoff=0.1))
@@ -426,7 +427,7 @@ def parse_lexed(lexed):
                         'comment': 'Not a builtin filter? Maybe: ' + suggest})
                 break
         elif 'NOT_CONSUMED' == tok['tag']:
-            if token_text(tok).startswith('&&'):
+            if tok_text.startswith('&&'):
                 recommendations.append({'tok':tok, 'related_tokens': [],
                                         'comment': 'Did you mean "and" ?',
                                         })
@@ -438,24 +439,51 @@ def parse_lexed(lexed):
             if '{' == token_text(lexed[i]) and begins:
                 recommend('Did you forget to close this? Nested tags found.',
                           token=begins[-1]['lines'][0])
-        elif 'operator' == tok['tag'] and '}' == token_text(tok):
+        elif 'operator' == tok['tag'] and '}' == tok_text:
             cand = list(filter(lambda x: token_text(x).startswith('{'), begins))
-            if cand and not (this_token_closed and tokens_match(token_text(this_token_closed), token_text(tok))):
+            if cand and not (this_token_closed and tokens_match(token_text(this_token_closed), tok_text)):
                 recommend('Found single "}" operator at ' + lexed_loc(lexed[i]) + \
                           ', did you mean to close '+ repr(token_text(cand[0])) + \
                           ' at ' + lexed_loc(cand[0]) + '?',
                           related=[cand[0]] # mark for display
                           )
-        elif 'name' == tok['tag'] and token_text(tok) == 'is':
+        elif 'name' == tok['tag'] and tok_text in ('is', 'ansible_distribution'):
             for next in lexed[i+1:]:
                 if next['tag'] in ('whitespace',): continue
-                if token_text(next) in BUILTIN_TESTS: break
-                suggest = ', '.join(difflib.get_close_matches(
-                    token_text(next), BUILTIN_TESTS, 2,cutoff=0.1))
-                recommendations.append({'tok': next,
-                                        'related_tokens': [tok],
-                                        'comment': 'Not a builtin Test? Maybe: ' + suggest})
-                break
+                if 'is' == tok_text:
+                    if token_text(next) in BUILTIN_TESTS: break
+                    suggest = ', '.join(difflib.get_close_matches(
+                        token_text(next), BUILTIN_TESTS, 2,cutoff=0.1))
+                    recommendations.append({'tok': next,
+                                            'related_tokens': [tok],
+                                            'comment': 'Not a builtin Test? Maybe: ' + suggest})
+                    break
+                elif 'ansible_distribution' == tok_text:
+                    # Fix for issues/8 ; spell-checking
+                    # (name:ansible_distribution)
+                    # (operator tokens) / (whitespace tokens)
+                    # (string:next)
+                    if next['tag'] in ('operator',): continue
+                    if 'string' == next['tag']:
+                        distro = token_text(next).strip(r'"\'')
+                        # source:
+                        # https://docs.ansible.com/ansible/latest/user_guide/playbooks_conditionals.html#ansible-facts-distribution
+                        suggests = difflib.get_close_matches(
+                            distro,
+                            ('Alpine','Altlinux','Amazon','Archlinux','ClearLinux','Coreos',
+                             'CentOS','Debian','Fedora','Gentoo','Mandriva','NA','OpenWrt',
+                             'OracleLinux','RedHat','Slackware','SLES','SMGL','SUSE','Ubuntu',
+                             'VMwareESX', # extras:
+                             'Kali','OpenSUSE','FreeBSD','Red Hat Enterprise Linux'),
+                            cutoff=0.25)
+                        if distro not in suggests:
+                            recommendations.append({
+                                'tok': next, 'related_tokens':[tok],
+                                'comment': f'Did you mean {suggests} ?',})
+                    break
+                else:
+                    break # break the "for next in ..." if we're never going to match anything.
+
     if begins:
         # TODO only warn if there's no lexer error?
         #if not any(filter(lambda x: 'NOT_CONSUMED' == x['tag'] and '}' in token_text(x), lexed)):

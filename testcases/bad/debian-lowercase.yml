@@ -1,0 +1,8 @@
+# we produce the recommendation:
+#   5:35 ┣━━━━━━━━━━━━ string: 'debian'
+#               ⚞ Did you mean ['Debian', 'ClearLinux', 'Ubuntu'] ?⚟
+
+- name: install the most important things
+  when: "ansible_distribution == 'debian'"
+  apt:
+    name: emacs
