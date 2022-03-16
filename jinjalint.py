@@ -411,6 +411,11 @@ def parse_lexed(lexed):
         if 'operator' == tok['tag'] and token_text(tok) == '|':
             for next in lexed[i + 1:]: # skipping whitespace, TODO comments?
                 if next['tag'] in ('whitespace',): continue
+                if 'operator' == next['tag']:
+                    if '|' == token_text(next): # "||" results in two operators '|','|':
+                        recommendations.append({'tok':next, 'related_tokens': [tok],
+                                                'comment': 'Did you mean "or" ?',})
+                        break
                 if 'name' == next['tag']:
                     if token_text(next) in BUILTIN_FILTERS: break
                     suggest = ', '.join(difflib.get_close_matches(
@@ -420,6 +425,11 @@ def parse_lexed(lexed):
                         'related_tokens': [],
                         'comment': 'Not a builtin filter? Maybe: ' + suggest})
                 break
+        elif 'NOT_CONSUMED' == tok['tag']:
+            if token_text(tok).startswith('&&'):
+                recommendations.append({'tok':tok, 'related_tokens': [],
+                                        'comment': 'Did you mean "and" ?',
+                                        })
         # BELOW: Heuristics that depend on look-ahead:
         if i+1 == len(lexed): continue
         if 'operator' == tok['tag'] and 'operator' == lexed[i+1]['tag'] and \
