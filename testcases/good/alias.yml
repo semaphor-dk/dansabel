@@ -1,0 +1,6 @@
+# test of aliases
+
+morrison: &includeme
+  dylan: '{{ hello }}'
+
+elvis: *includeme

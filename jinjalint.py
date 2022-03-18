@@ -32,6 +32,8 @@ FAIL_WHEN_ONLY_ANNOTATIONS = True
 USE_COLORS = False
 
 EXTERNAL_VARIABLES = dict()
+ANCHORS = dict() # aliases/anchors defined
+ALIASED_ANCHORS = dict() # aliases/anchor used (referring to ANCHORS)
 
 VERTICAL_PIPE = '┃'
 HORIZONTAL_PIPE = '━'
@@ -648,6 +650,12 @@ def check_val(doc, pos_stack, error=False):
             output('YAML parser/lexer exit before end of document.')
             output(Colored(HORIZONTAL_PIPE * OUT_COLS, 'ERROR'))
             return True # this is an error
+
+        if getattr(v,'anchor',None) and not isinstance(v, ruamel.yaml.events.AliasEvent):
+            # https://www.educative.io/blog/advanced-yaml-syntax-cheatsheet#anchors
+            # similar to HTML <a id="v.anchor">
+            ANCHORS[v.anchor] = v
+
         # TODO need to implement special handling of the 'when:' keys
         if isinstance(v, ruamel.yaml.events.ScalarEvent):
             if S_KEY == state[-1][0]:
@@ -716,6 +724,11 @@ def check_val(doc, pos_stack, error=False):
         elif isinstance(v, ruamel.yaml.events.StreamStartEvent):   pass
         elif isinstance(v, ruamel.yaml.events.StreamEndEvent):
             break
+        elif isinstance(v, ruamel.yaml.events.AliasEvent):
+            # an AliasEvent is when something tries to include/refer to an "anchor",
+            # similar to <a href="#anchor">
+            if v.anchor:
+                ALIASED_ANCHORS[v.anchor] = v
         else:
             output(pos_stack, f'\nBUG: please report this! unhandled YAML type {repr(v)}') #, file=sys.stderr)
             error = True
@@ -857,4 +870,23 @@ List external variables used from Jinja:
                return json.JSONEncoder.default(self, obj)
         # TODO should this really be print() ?
         print(json.dumps(EXTERNAL_VARIABLES, cls=SetEncoder))
+
+    missing_anchors = set(ALIASED_ANCHORS).difference(set(ANCHORS))
+    if missing_anchors:
+        # ALIASED_ANCHORS contains something not in ANCHORS, which means we are referring to
+        # an anchor that doesn't exist.
+        # TODO: this heuristic will let some problems fall through the cracks because we do not
+        # track scoping of aliases/anchors like Ansible would, but at least we can catch
+        # misspelled anchors. :-)
+        error = True
+        unused_anchors = set(ANCHORS).difference(set(ALIASED_ANCHORS))
+        output(Colored('undefined anchors attempted aliased:', 'ERROR'))
+        for m in missing_anchors:
+            suggested = difflib.get_close_matches(m, unused_anchors, 1, cutoff=0.20)
+            output(Colored('- '+repr(m)+str(ALIASED_ANCHORS[m].start_mark), 'ERROR'),
+		end='')
+            if suggested:
+                output(Colored(' - did you mean ' + repr(suggested[0]), 'ERROR'), end='')
+            output()
+
     sys.exit(error)

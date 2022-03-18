@@ -1,0 +1,16 @@
+---
+# see https://github.com/semaphor-dk/dansabel/issues/6
+
+foo: &anchor
+  K1: "One"
+  K2: "Two"
+  <<: &anchor4
+    K4: "Four"
+
+bar:
+  <<: *anchornotexist
+  K2: "I Changed"
+  K3: "Three"
+
+kilroy: *anchor4
+
