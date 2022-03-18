@@ -837,7 +837,7 @@ List external variables used from Jinja:
     args = a_parser.parse_args()
 
     if args.quiet:
-        output = lambda *x: None
+        output = lambda *x, **kw: None
 
     if args.context_lines:
         LAST_THRESHOLD = args.context_lines
