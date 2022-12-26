@@ -1,0 +1,5 @@
+# regression for issue #17: "not" is not recognized as builtin test
+# 'is not' should be followed by a test, it doesn't replace the need for
+# a test ().
+root:
+  except: '{{ i in idict and idict[i].disabled is not not }}'

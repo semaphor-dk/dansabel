@@ -1,0 +1,4 @@
+# regression for issue #17: "not" is not recognized as builtin test
+# 'is not defined' should of course be recognized as valid:
+root:
+  except: '{{ i in idict and idict[i].disabled is not defined }}'

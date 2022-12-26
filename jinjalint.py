@@ -450,9 +450,12 @@ def parse_lexed(lexed):
                           related=[cand[0]] # mark for display
                           )
         elif 'name' == tok['tag'] and tok_text in ('is', 'ansible_distribution'):
+            next_i = -1
             for next in lexed[i+1:]:
                 if next['tag'] in ('whitespace',): continue
+                next_i += 1 # next_i is like enumerate(lexed), but skipping whitespace
                 if 'is' == tok_text:
+                    if next_i == 0 and token_text(next) == 'not': continue
                     if token_text(next) in BUILTIN_TESTS: break
                     suggest = ', '.join(difflib.get_close_matches(
                         token_text(next), BUILTIN_TESTS, 2,cutoff=0.1))

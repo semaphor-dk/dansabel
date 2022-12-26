@@ -1,0 +1,4 @@
+# regression for issue #17: "not" is not recognized as builtin test
+# 'is not not defined' is most likely a typo
+root:
+  except: '{{ i in idict and idict[i].disabled is not not defined }}'
