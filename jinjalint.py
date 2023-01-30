@@ -32,6 +32,7 @@ FAIL_WHEN_ONLY_ANNOTATIONS = True
 USE_COLORS = False
 
 EXTERNAL_VARIABLES = dict()
+SEEN_TAGS = dict() # filename -> tags: conditionals
 ANCHORS = dict() # aliases/anchors defined
 ALIASED_ANCHORS = dict() # aliases/anchor used (referring to ANCHORS)
 
@@ -643,7 +644,9 @@ S_VAL = 20
 S_SEQ = 30
 
 def check_val(doc, pos_stack, error=False):
-    state = [ (S_VAL,0,set()) ] # list of tuples of state and data (used for list item counting)
+    state = [ (S_VAL, 0, set()) ]
+    # list of tuples of state and data (used for list item counting). The set
+    # keeps track of siblings keys to enable duplicate detection.
     while True:
         try:
             v = next(doc)
@@ -658,7 +661,6 @@ def check_val(doc, pos_stack, error=False):
             # https://www.educative.io/blog/advanced-yaml-syntax-cheatsheet#anchors
             # similar to HTML <a id="v.anchor">
             ANCHORS[v.anchor] = v
-
         # TODO need to implement special handling of the 'when:' keys
         if isinstance(v, ruamel.yaml.events.ScalarEvent):
             if S_KEY == state[-1][0]:
@@ -670,10 +672,20 @@ def check_val(doc, pos_stack, error=False):
                 pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], v.value)
             elif S_SEQ == state[-1][0]:
                 error |= check_str(v, pos_stack)
+                if len(state) >= 2 and state[-2][0] == S_KEY and state[-2][1] == 'tags':
+                    # tags: [ ..., v , ... ]: collect these for display
+                    filename = pos_stack[0][2].rstrip(':')
+                    SEEN_TAGS[filename] = SEEN_TAGS.get(filename, set())
+                    SEEN_TAGS[filename].add(v.value)
                 next_idx = state[-1][1] + 1
                 state[-1] = (state[-1][0], next_idx)
                 pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], next_idx)
             elif S_VAL == state[-1][0]:
+                if state[-1][1] == 'tags':
+                    # when it's a scalar value, it's split by comma
+                    filename = pos_stack[0][2].rstrip(':')
+                    SEEN_TAGS[filename] = SEEN_TAGS.get(filename, set())
+                    SEEN_TAGS[filename].update(map(lambda x:x.strip(), v.value.split(',')))
                 if state[-1][1] == 'name':
                     error |= check_str(v, pos_stack)
                     # set context name of the parent node to the value of this:
@@ -839,17 +851,34 @@ def lint(filename):
         return True # that did not go well, perhaps file not found or yaml parsing err
 
 if '__main__' == __name__:
-    a_parser = argparse.ArgumentParser(description='''
-List external variables used from Jinja:
-  jinjalint.py -qe ./*.j2 ./*.yml
+    a_parser = argparse.ArgumentParser(
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description='Lints each of the provided FILE(s) for jinja2/yaml errors.',
+        epilog=
+'''EXAMPLES
+
+  List external variables used from Jinja:
+  jinjalint.py -q --external ./*.j2 ./*.yml
+
+  List tags encountered in YAML files:
+  jinjalint.py -q --tags testcases/good/*.yml
 ''')
     a_parser.add_argument('FILE', nargs='+')
     a_parser.add_argument('-C', '--context-lines', type=int, help="Number of context lines controls LAST_THRESHOLD")
     a_parser.add_argument('-q', '--quiet', action='store_true', help="No normal output to stdout")
     a_parser.add_argument('-v', '--verbose', action='count', help="""Print verbose output.
 -v prints all Jinja snippets, regardless of errors. -vv prints full AST for each Jinja node.""", default=0)
-    a_parser.add_argument('-e', '--external', action='store_true',
-                          help='''List external variables used. Use -q -e to only print this summary. Note that -e only works for files that can be parsed without errors.''')
+    group_analysis = a_parser.add_argument_group(
+        'Analysis options',
+        description='''Dumps a JSON dictionary with the results of various analysis steps.
+Note that these only work for files that can be parsed without errors.
+Use -q to print ONLY this JSON summary.''')
+    group_analysis.add_argument(
+        '-e', '--external', action='store_true',
+        help='''List external variables used.''')
+    group_analysis.add_argument(
+        '-t', '--tags', action='store_true',
+        help='''List encountered tags.''')
     args = a_parser.parse_args()
 
     if args.quiet:
@@ -865,14 +894,25 @@ List external variables used from Jinja:
     for filename in args.FILE:
         if '--' == filename: continue
         error |= lint(filename)
-    if EXTERNAL_VARIABLES and (verbosity > 1 or args.external):
-        class SetEncoder(json.JSONEncoder):
-            '''https://stackoverflow.com/a/8230505'''
-            def default(self, obj):
-               if isinstance(obj, set): return sorted(list(obj))
-               return json.JSONEncoder.default(self, obj)
+    class SetEncoder(json.JSONEncoder):
+        '''https://stackoverflow.com/a/8230505'''
+        def default(self, obj):
+            if isinstance(obj, set): return sorted(list(obj))
+            return json.JSONEncoder.default(self, obj)
+    json_dump = {}
+    if args.external:
         # TODO should this really be print() ?
-        print(json.dumps(EXTERNAL_VARIABLES, cls=SetEncoder))
+        json_dump['external_variables'] = EXTERNAL_VARIABLES
+    if args.tags:
+        json_dump['files_to_tags'] = SEEN_TAGS
+        tags_to_files = dict()
+        for fn,tags in SEEN_TAGS.items():
+            for tag in tags:
+                tags_to_files[tag] = tags_to_files.get(tag, set())
+                tags_to_files[tag].add(fn)
+        json_dump['tags_to_files'] = tags_to_files
+    if args.tags or args.external:
+        print(json.dumps(json_dump, cls=SetEncoder, indent=2))
 
     missing_anchors = set(ALIASED_ANCHORS).difference(set(ANCHORS))
     if missing_anchors:

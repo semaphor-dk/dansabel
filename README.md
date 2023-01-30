@@ -26,10 +26,126 @@ Dansabel is published as free software under the [ISC license](https://en.wikipe
 ## Linter
 
 ```
-usage: jinjalint.py [YAML-FILES]
+ python3 jinjalint.py -h
+usage: jinjalint.py [-h] [-C CONTEXT_LINES] [-q] [-v] [-e] [-t] FILE [FILE ...]
 
-Lints each of the provided YAML-FILES in turn.
+Lints each of the provided FILE(s) for jinja2/yaml errors.
+
+positional arguments:
+  FILE
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -C CONTEXT_LINES, --context-lines CONTEXT_LINES
+                        Number of context lines controls LAST_THRESHOLD
+  -q, --quiet           No normal output to stdout
+  -v, --verbose         Print verbose output. -v prints all Jinja snippets, regardless of errors. -vv prints full AST for each Jinja
+                        node.
+
+Analysis options:
+  Dumps a JSON dictionary with the results of various analysis steps.
+  Note that these only work for files that can be parsed without errors.
+  Use -q to print ONLY this JSON summary.
+
+  -e, --external        List external variables used.
+  -t, --tags            List encountered tags.
+
+EXAMPLES
+
+  List external variables used from Jinja:
+  jinjalint.py -q --external ./*.j2 ./*.yml
+
+  List tags encountered in YAML files:
+  jinjalint.py -q --tags testcases/good/*.yml
 ```
+
+### Listing external variable references
+
+```bash
+python3 jinjalint.py -q --external testcases/good/*{/*,}.{j2,yml}
+```
+
+<details>
+
+```json
+{
+  "external_variables": {
+    "testcases/good/templates/if-elif-endif.j2": [
+      "also_good",
+      "good"
+    ],
+    "testcases/good/templates/if-endif.j2": [
+      "good"
+    ],
+    "testcases/good/alias.yml": [
+      "hello"
+    ],
+    "testcases/good/file-with_items-11.yml": [
+      "item"
+    ],
+    "testcases/good/is-not.yml": [
+      "i",
+      "idict"
+    ],
+    "testcases/good/simple-expansions.yml": [
+      "ok",
+      "x"
+    ],
+    "testcases/good/tags.yml": [
+      "ext"
+    ]
+  }
+}
+```
+
+In your own project you might run something along the lines of:
+```bash
+find . -type f '(' -name '*.j2' -or -name '*.yml' -or -path '*/templates/*' ')' \
+  -exec ~/dansabel/jinjalint.py -qe {} +
+```
+
+</details>
+
+### Listing tags used in YAML files
+
+```bash
+python3 jinjalint.py -q --tags testcases/good/*.yml
+```
+
+Produces two JSON keys, `files_to_tags` and `tags_to_files`, which map filenames to the tags mentioned in the files and vice-versa.
+
+<details>
+
+```json
+{
+  "files_to_tags": {
+    "testcases/good/tags_strings.yml": [
+      "configuration",
+      "packages",
+      "without quotes"
+    ],
+    "testcases/good/tags.yml": [
+      "configuration",
+      "packages"
+    ]
+  },
+  "tags_to_files": {
+    "packages": [
+      "testcases/good/tags.yml",
+      "testcases/good/tags_strings.yml"
+    ],
+    "without quotes": [
+      "testcases/good/tags_strings.yml"
+    ],
+    "configuration": [
+      "testcases/good/tags.yml",
+      "testcases/good/tags_strings.yml"
+    ]
+  }
+}
+```
+
+</details>
 
 ## Git hook
 

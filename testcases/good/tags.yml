@@ -1,0 +1,14 @@
+tasks:
+- yum:
+    name:
+    - httpd
+    - memcached
+    state: present
+  tags:
+  - packages
+
+- template:
+    src: templates/src.j2
+    dest: /etc/foo.conf{{ ext }}
+  tags:
+  - configuration

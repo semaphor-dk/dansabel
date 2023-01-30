@@ -1,0 +1,7 @@
+---
+- name: "only if 'packages'"
+  tags: "packages"
+
+- name: "if 'configuration' or 'without quotes'"
+  tags: configuration , without quotes
+  # parsed as: ["configuration", "without quotes"]

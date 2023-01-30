@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='dansabel',
-    version='1.2',
+    version='1.3',
     install_requires=['ruamel.yaml', 'jinja2', 'ansible-core'],
     author='Semaphor',
     author_email='info@semaphor.dk',
