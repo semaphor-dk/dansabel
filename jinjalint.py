@@ -422,6 +422,12 @@ def parse_lexed(lexed):
                         break
                 elif 'name' == next['tag']:
                     if token_text(next) in BUILTIN_FILTERS: break
+                    if token_text(next) == 'ansible':
+                        # https://github.com/semaphor-dk/dansabel/issues/19
+                        # Until we figure out how to reliably resolve these,
+                        # we'll just skip the spell checking when applying
+                        # filters like [..., '|', 'ansible', ...]
+                        break
                     suggest = ', '.join(difflib.get_close_matches(
                         token_text(next), BUILTIN_FILTERS, 2,cutoff=0.1))
                     recommendations.append({
