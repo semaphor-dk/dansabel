@@ -332,6 +332,21 @@ def print_lexed_debug(lexed, node_path, parse_e, lexer_e=None, annotations=[], d
         output(Colored(HORIZONTAL_PIPE * OUT_COLS, 'string'))
 
 
+def load_ansible_collections_filters():
+    import importlib
+    from pathlib import Path
+    import ansible_collections
+    for f in Path(ansible_collections.__path__[0]).glob('**/plugins/filter/*.py'):
+        if f.stem.startswith('_'): continue
+        parts = f._parts[f._parts.index('ansible_collections') :]
+        parts[-1] = parts[-1].replace('.py', '')
+        mod = importlib.import_module('.'.join(parts), package=ansible_collections)
+        filters = mod.FilterModule().filters().keys()
+        filter_ns = parts[1:-3] # skip 'ansible_collections/' and 'plugins/filters'
+        for fname in filters:
+            yield fname
+            yield '.'.join(parts[1:-3] + [fname])
+
 # "XXX is YYY(...)" where YYY is a test and ... is zero or more arguments:
 # https://jinja.palletsprojects.com/en/3.0.x/templates/#builtin-tests
 JINJA_BUILTIN_TESTS = set(jinja2.tests.TESTS)
@@ -347,10 +362,9 @@ JINJA_BUILTIN_FILTERS = set(jinja2.filters.FILTERS)
 
 ANSIBLE_BUILTIN_FILTERS = set()
 if not SKIP_COMMUNITY:
-    ANSIBLE_BUILTIN_FILTERS = ANSIBLE_BUILTIN_FILTERS.union(*[
-        set(importlib.import_module('ansible_collections.community.general.plugins.filter.' + name).FilterModule().filters())
-        for loader, name, is_pkg in pkgutil.walk_packages(ansible_collections.community.general.plugins.filter.__path__)
-    ])
+    ANSIBLE_BUILTIN_FILTERS = ANSIBLE_BUILTIN_FILTERS.union(
+        load_ansible_collections_filters()
+    )
 ANSIBLE_BUILTIN_FILTERS.update(*[
     importlib.import_module('ansible.plugins.filter.' + name).FilterModule().filters()
     for loader, name, is_pkg in pkgutil.walk_packages(ansible.plugins.filter.__path__)
@@ -413,7 +427,11 @@ def parse_lexed(lexed):
             if not tokens_match(token_text(this_token_closed), tok_text):
                 recommend('Unclosed block?', related=[this_token_closed])
         if 'operator' == tok['tag'] and tok_text == '|':
-            for next in lexed[i + 1:]: # skipping whitespace, TODO comments?
+            # We expect a filter to follow. Filters are either 'name'
+            # or they are 'name' 'operator .' 'name', ...
+            next_lexed = lexed[i + 1:]
+            for next_idx, next in enumerate(next_lexed):
+                # skipping whitespace, TODO comments?
                 if next['tag'] in ('whitespace',): continue
                 if 'operator' == next['tag']:
                     if '|' == token_text(next): # "||" results in two operators '|','|':
@@ -421,15 +439,22 @@ def parse_lexed(lexed):
                                                 'comment': 'Did you mean "or" ?',})
                         break
                 elif 'name' == next['tag']:
-                    if token_text(next) in BUILTIN_FILTERS: break
-                    if token_text(next) == 'ansible':
-                        # https://github.com/semaphor-dk/dansabel/issues/19
-                        # Until we figure out how to reliably resolve these,
-                        # we'll just skip the spell checking when applying
-                        # filters like [..., '|', 'ansible', ...]
-                        break
+                    tag_suffix = []
+                    while (len(next_lexed) - next_idx > 0
+                        and (next_lexed[next_idx+1]['tag'] == 'operator'
+                             and token_text(next_lexed[next_idx+1]) == '.'
+                             )):
+                        next_idx += 2
+                        if next_lexed[next_idx]['tag'] == 'name':
+                            tag_suffix.append(token_text(next_lexed[next_idx]))
+                        else:
+                            break
+                    this_text = token_text(next)
+                    if tag_suffix:
+                        this_text = joined = '.'.join([this_text, *tag_suffix])
+                    if this_text in BUILTIN_FILTERS: break
                     suggest = ', '.join(difflib.get_close_matches(
-                        token_text(next), BUILTIN_FILTERS, 2,cutoff=0.1))
+                        this_text, BUILTIN_FILTERS, 2,cutoff=0.1))
                     recommendations.append({
                         'tok': next,
                         'related_tokens': [],
