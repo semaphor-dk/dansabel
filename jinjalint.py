@@ -338,7 +338,11 @@ def load_ansible_collections_filters():
     import ansible_collections
     for f in Path(ansible_collections.__path__[0]).glob('**/plugins/filter/*.py'):
         if f.stem.startswith('_'): continue
-        parts = f._parts[f._parts.index('ansible_collections') :]
+        if sys.version_info >= (3, 4):
+            # As best that i can tell this changed in 3.4 when pathlib was included [Quien Sabe]
+            parts = list(f.parts[f.parts.index('ansible_collections') :])
+        else:
+            parts = f._parts[f._parts.index('ansible_collections') :]
         parts[-1] = parts[-1].replace('.py', '')
         mod = importlib.import_module('.'.join(parts), package=ansible_collections)
         filters = mod.FilterModule().filters().keys()
@@ -814,7 +818,7 @@ def lint_ansible_directives(v:ruamel.yaml.events.MappingEndEvent, state, pos_sta
         'environment','retries','run_once',
         'failed_when','changed_when','delegate_to', 'until', 'delay',
         'listen', # for handlers
-        'roles','pre_tasks','gather_facts', 'connection', 'tasks', # TODO these are not actually valid inside tasks,
+        'roles','pre_tasks','gather_facts', 'connection', 'tasks','handlers', 'vars_files', 'vars_prompt', # TODO these are not actually valid inside tasks,
         # but listing them here lowers the number of false positives when accidentally
         # running jinjalint.py on a playbook.
         # (we SHOULD be able to handle playbooks, since we are a commit hook for *.yml)
