@@ -47,6 +47,7 @@ try:
 except: # It's not going to be pretty, but OK:
     OUT_COLS = 72
 
+USE_COLORS = USE_COLORS and (os.getenv('NO_COLOR', None) is not None)
 
 # we will use the same immutable jinja environment instead of instantiating a new one
 # for each string field in each YAML file, for better performance.
@@ -105,25 +106,25 @@ def __vt100_color(tag, text):
     '''Wrap (text) in VT100 escape codes coloring according to (tag). Uses the xterm-256 color palette.'''
     RESET_COLOR = '\x1b[39;49;0m'
     prefix = RESET_COLOR
-    if 'data' == tag: prefix= '\x1b[38:5:248:0m' # gray
-    elif 'variable_begin' == tag or 'variable_end' == tag: prefix = '\x1b[38:5:91;1m' # purple
-    elif 'operator' == tag: prefix = '\x1b[36;1m' # green
+    if 'data' == tag: prefix= '\x1b[0m\x1b[38;5;248m' # gray
+    elif 'variable_begin' == tag or 'variable_end' == tag: prefix = '\x1b[38;5;91m\x1b[1m' # purple
+    elif 'operator' == tag: prefix = '\x1b[36m\x1b[1m' # green
     elif tag in (
             'block_begin',
             'block_end',
             'raw_begin',
-            'raw_end'): prefix = '\x1b[38:5:208;1m' # orange
-    elif 'LEX_ERROR' == tag: prefix = '\x1b[38:5:217;1;41m'
+            'raw_end'): prefix = '\x1b[38;5;208m\x1b[1m' # orange
+    elif 'LEX_ERROR' == tag: prefix = '\x1b[38;5;231m\x1b[1;41m'
     elif 'BOLD' == tag: prefix = '\x1b[1m'
     elif 'comment_begin' == tag or \
          'comment' == tag or \
-         'comment_end' == tag: prefix = '\x1b[38:5:165m' # magenta/pink
-    elif tag in ('integer','IF'): prefix = '\x1b[38:5:108;1m' # white fg green bg
-    elif tag in ('name', 'FOR'): prefix = '\x1b[38:5:10:20;1m' # green (no bg)
-    elif 'string' == tag: prefix = '\x1b[38:5:197:0;1m' # red-ish
+         'comment_end' == tag: prefix = '\x1b[38;5;165m' # magenta/pink
+    elif tag in ('integer','IF'): prefix = '\x1b[38;5;108m\x1b[1m' # white fg green bg
+    elif tag in ('name', 'FOR'): prefix = '\x1b[38;5;10m\x1b[1m' # green (no bg)
+    elif 'string' == tag: prefix = '\x1b[38;5;197m\x1b[1m' # red-ish
     elif 'whitespace' == tag or \
        'RESET' == tag: prefix = RESET_COLOR
-    elif 'ERROR' == tag: prefix ='\x1b[38:5:15;1;41m' # white fg red bg
+    elif 'ERROR' == tag: prefix ='\x1b[38;5;15m\x1b[1;41m' # white fg red bg
     elif 'NOT_CONSUMED' == tag:
         prefix = '\x1b[37;1;41m' # white fg red bg for the first two characters
         prefix += text[:2] + color_text('data', text[2:])
@@ -897,6 +898,8 @@ if '__main__' == __name__:
 
   List tags encountered in YAML files:
   jinjalint.py -q --tags testcases/good/*.yml
+
+  Set environment variable NO_COLOR to disable colored output.
 ''')
     a_parser.add_argument('FILE', nargs='+')
     a_parser.add_argument('-C', '--context-lines', type=int, help="Number of context lines controls LAST_THRESHOLD")

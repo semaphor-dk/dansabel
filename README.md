@@ -57,7 +57,13 @@ EXAMPLES
 
   List tags encountered in YAML files:
   jinjalint.py -q --tags testcases/good/*.yml
+
+  Set environment variable NO_COLOR to disable colored output.
 ```
+
+### Colors
+
+`jinjalint.py` will try to detect if it's running in a `pty`, and will emit vt100 colors unless [`NO_COLOR`](https://no-color.org/) is set in that case.
 
 ### Listing external variable references
 
