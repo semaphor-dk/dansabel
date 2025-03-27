@@ -13,11 +13,8 @@ import importlib
 import ansible.plugins.filter
 import ansible.plugins.test
 import pkgutil
-try:
-    import ansible_collections.community.general.plugins.filter
-    SKIP_COMMUNITY = False
-except:
-    SKIP_COMMUNITY = True
+
+import ansible_collections.community.general.plugins.filter
 
 # from ansible_collections.ansible_release import ansible_version
 # ^- retrieve the ansible version we are checking against
@@ -366,10 +363,9 @@ ANSIBLE_BUILTIN_TESTS = set().union(*[
 JINJA_BUILTIN_FILTERS = set(jinja2.filters.FILTERS)
 
 ANSIBLE_BUILTIN_FILTERS = set()
-if not SKIP_COMMUNITY:
-    ANSIBLE_BUILTIN_FILTERS = ANSIBLE_BUILTIN_FILTERS.union(
-        load_ansible_collections_filters()
-    )
+ANSIBLE_BUILTIN_FILTERS = ANSIBLE_BUILTIN_FILTERS.union(
+    load_ansible_collections_filters()
+)
 ANSIBLE_BUILTIN_FILTERS.update(*[
     importlib.import_module('ansible.plugins.filter.' + name).FilterModule().filters()
     for loader, name, is_pkg in pkgutil.walk_packages(ansible.plugins.filter.__path__)
