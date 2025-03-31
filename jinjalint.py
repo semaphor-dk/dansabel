@@ -46,7 +46,7 @@ try:
 except Exception:  # It's not going to be pretty, but OK:
     OUT_COLS = 72
 
-USE_COLORS = USE_COLORS and (os.getenv("NO_COLOR", None) is not None)
+USE_COLORS = USE_COLORS and (os.getenv("NO_COLOR", None) is None)
 
 # we will use the same immutable jinja environment instead of instantiating a new one
 # for each string field in each YAML file, for better performance.
