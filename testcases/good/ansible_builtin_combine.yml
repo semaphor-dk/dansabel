@@ -1,0 +1,9 @@
+---
+- name: "Add authorized keys"
+  ansible.posix.authorized_key:
+    user: "{{ item.key }}"
+    key: "{{ item.value.key }}"
+  loop: "{{ users | ansible.builtin.combine(extra_users | default({})) }}"
+  loop_control:
+    label: "{{ item.key }}"
+...

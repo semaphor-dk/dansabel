@@ -1,0 +1,9 @@
+---
+
+- name: "misplaced-quotes: quotes in > blocks are literal quotes"
+  debug:
+    msg: >
+      "{{ (1234567 | "
+      "int) }}"
+
+...

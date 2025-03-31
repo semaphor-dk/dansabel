@@ -450,14 +450,19 @@ ANSIBLE_BUILTIN_FILTERS = ANSIBLE_BUILTIN_FILTERS.union(
     load_ansible_collections_filters()
 )
 ANSIBLE_BUILTIN_FILTERS.update(
-    *[
-        importlib.import_module("ansible.plugins.filter." + name)
-        .FilterModule()
-        .filters()
+    {
+        # These are accesible both with their free-standing name and namespaced as "ansible.builtin."
+        # https://docs.ansible.com/ansible/latest/collections/ansible/builtin/index.html#filter-plugins
+        prefix + key
         for loader, name, is_pkg in pkgutil.walk_packages(
             ansible.plugins.filter.__path__
         )
-    ],
+        for key in importlib.import_module("ansible.plugins.filter." + name)
+        .FilterModule()
+        .filters()
+        .keys()
+        for prefix in ("", "ansible.builtin.")
+    },
     {"lookup", "query", "now", "undef"},
 )
 # https://github.com/ansible/ansible/blob/2058ea59915655d71bf5bd9d3f7e318ffec3c658/lib/ansible/template/__init__.py#L649-L653
@@ -588,6 +593,15 @@ def parse_lexed(lexed):
                             "tok": next,
                             "related_tokens": [],
                             "comment": "Not a builtin filter? Maybe: " + suggest,
+                        }
+                    )
+                else:
+                    recommendations.append(
+                        {
+                            "tok": next,
+                            "related_tokens": [],
+                            "comment": "Expecting filter name after |, not: "
+                            + next["tag"],
                         }
                     )
                 break
