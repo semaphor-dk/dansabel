@@ -1,0 +1,6 @@
+---
+- name: "should not allow | max here"
+  ansible.builtin.command:
+    cmd: "git rev-parse HEAD"
+  register: gitresult | max
+...

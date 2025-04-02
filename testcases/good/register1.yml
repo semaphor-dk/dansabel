@@ -1,0 +1,13 @@
+---
+- name: "Get HEAD revision of git checkout"
+  ansible.builtin.command:
+    cmd: "git rev-parse HEAD"
+  args:
+    chdir: "{{ my_git_dir }}"
+  register: gitresult
+  changed_when: true
+
+- name: "Check status of HEAD"
+  ansible.builtin.command:
+    cmd: "git status {{ gitresult }}"
+...

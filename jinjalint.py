@@ -222,7 +222,7 @@ def is_scope_close(tok):
 def print_lexed_debug(
     lexed, node_path, parse_e, lexer_e=None, annotations=[], debug=False
 ):
-    if all(map(lambda x: "data" == x["tag"], lexed)):
+    if lexed and all(map(lambda x: "data" == x["tag"], lexed)):
         return
     if not isinstance(
         parse_e, Exception
@@ -394,6 +394,7 @@ def print_lexed_debug(
                 output(
                     f"{UNICODE_DOT} {node_path}",
                     lexer_e.lineno,
+                    lexer_e.lex_col,
                     Colored("jinja lexer", "LEX_ERROR"),
                     Colored(lexer_e.message, "LEX_ERROR"),
                     sep=f" {VERTICAL_PIPE} ",
@@ -484,7 +485,7 @@ def first_non_whitespace(tok_list):
         return tok
 
 
-def parse_lexed(lexed):
+def parse_lexed(lexed) -> list[dict[str, str | list]]:
     begins = []
     recommendations = []
     for i in range(len(lexed)):
@@ -542,11 +543,15 @@ def parse_lexed(lexed):
                                 )
             begins.append(tok)
         elif is_scope_close(tok):
-            this_token_closed = (
-                begins.pop()
-            )  # TODO should pop last matching type; anything else is an error
-            if not tokens_match(token_text(this_token_closed), tok_text):
-                recommend("Unclosed block?", related=[this_token_closed])
+            try:
+                this_token_closed = (
+                    begins.pop()
+                )  # TODO should pop last matching type; anything else is an error
+            except IndexError:
+                recommend("No matching start of this block.", related=[tok])
+            else:
+                if not tokens_match(token_text(this_token_closed), tok_text):
+                    recommend("Unclosed block?", related=[this_token_closed])
         if "operator" == tok["tag"] and tok_text == "|":
             # We expect a filter to follow. Filters are either 'name'
             # or they are 'name' 'operator .' 'name', ...
@@ -569,7 +574,7 @@ def parse_lexed(lexed):
                         break
                 elif "name" == next["tag"]:
                     tag_suffix = []
-                    while len(next_lexed) - next_idx > 0 and (
+                    while len(next_lexed) - next_idx > 1 and (
                         next_lexed[next_idx + 1]["tag"] == "operator"
                         and token_text(next_lexed[next_idx + 1]) == "."
                     ):
@@ -736,7 +741,7 @@ def parse_lexed(lexed):
     return recommendations
 
 
-def get_node_path(pos_stack):
+def get_node_path(pos_stack) -> str:
     """Returns a string representation of the AST node's path"""
     node_path = ""
     for i, p in enumerate(pos_stack):
@@ -747,23 +752,34 @@ def get_node_path(pos_stack):
     return node_path
 
 
-def check_str(yaml_node, pos_stack):
-    """returns True on error, False on success"""
-    s = yaml_node.value
+def check_str(
+    yaml_node, pos_stack, *, wrap_in_jinja_brackets=False, key: str | None = None
+) -> bool:
+    """
+    wrap_in_jinja_brackets: force jinja to consider the payload an expression by wrapping in {{ }}
+
+    returns True on error, False on success"""
+    if wrap_in_jinja_brackets:
+        s = "{{" + yaml_node.value + "}}"
+    else:
+        s = yaml_node.value
     parse_e = Target()
     parse_e.lineno = 0  # elsewhere we treat 'not lineno' as lack of information
     lexer_e = Target()
     lexer_e.lineno = 0  # defined here because we may to lift an exc out of its scope
     node_path = get_node_path(pos_stack)
 
+    file_line = yaml_node.start_mark.line
+    file_line += int(yaml_node.style in (">", "|"))  # adjust start location offset
+
     # TODO: '>' is "folded" style, where newlines are supposed to be replaced by spaces.
     # in ruamel that means turning \x0a into \x07\x0a. I don't think Jinja2 cares,
-    # for parsing purposes, whether whitespace is \n or \07, but if we keep the newlines
+    # for parsing purposes, whether whitespace is \n or " ", but if we keep the newlines
     # here, our locs will be correct; if we replace them with spaces we need to special
     # case that in the line tracker below to keep the correspondence between Jinja2 errors
     # and physical location. Thus our solution for now will be:
     if yaml_node.style == ">":
-        s = s.replace("\x07", "")
+        s = s.replace("\x07", "\n")
     try:
         jinja_template = JINJA2_SANDBOX_ENVIRON.parse(
             source=s, name=node_path, filename="JINJA_TODO_FILENAME_SEEMS_UNUSED"
@@ -788,10 +804,6 @@ def check_str(yaml_node, pos_stack):
     # line in the file, and (lex_col) is the actual column in the file.
     # The lex_line variable represents our attempt to follow the lexer.
 
-    file_line = yaml_node.start_mark.line
-    if "\n" in s:
-        file_line += 1
-        lex_col = yaml_node.start_mark.column
     parse_e.lineno = file_line + parse_e.lineno
     consumed = 0
 
@@ -801,7 +813,11 @@ def check_str(yaml_node, pos_stack):
     try:
         for rawtok in JINJA2_SANDBOX_ENVIRON.lex(source=s):
             consumed += len(rawtok[2])
+            if wrap_in_jinja_brackets and consumed in (2, len(s)):
+                # ignore the {{ and }} we add to force when: to be an expression
+                continue
             token = {"tag": rawtok[1], "lines": []}
+
             for lineno, text in enumerate(rawtok[2].splitlines(True)):
                 token["lines"].append(
                     {"line": file_line + lex_line, "byteoff": lex_col, "text": text}
@@ -813,9 +829,13 @@ def check_str(yaml_node, pos_stack):
                     lex_col += len(text)
             lexed.append(token)
     except jinja2.exceptions.TemplateSyntaxError as lex_e_exc:
-        if str(parse_e) != str(lex_e_exc):  # ignore redundant msgs
-            lexer_e = lex_e_exc
-            lexer_e.lineno = lexer_e.lineno + file_line
+        if parse_e.message == lex_e_exc.message:  # ignore redundant msgs
+            parse_e = None
+        lexer_e = lex_e_exc
+        lexer_e.lineno = lexer_e.lineno + file_line
+        lexer_e.colno = consumed + yaml_node.start_mark.column
+        # TODO with >, offset seems to be off by one, unlike |
+        lexer_e.lex_col = lex_col
     if (consumed + 1 == len(s)) and "\n" == s[-1]:
         pass  # ignore these trailing newlines
     elif consumed < len(s):
@@ -828,6 +848,22 @@ def check_str(yaml_node, pos_stack):
             lex_col += len(lin)
         lexed.append(not_consumed)
     annotations = parse_lexed(lexed)
+    if key == "register":
+        seen_names = False
+        for token in lexed:
+            if token["tag"] == "whitespace":
+                continue
+            if seen_names or token["tag"] != "name":
+                annotations.append(
+                    {
+                        "comment": "register: should contain a single variable ('name' token)",
+                        "tok": token,
+                        "related_tokens": [],
+                    }
+                )
+                break
+            seen_names |= token["tag"] == "name"
+
     print_lexed_debug(
         lexed, node_path, parse_e, lexer_e, annotations=annotations, debug=False
     )
@@ -841,11 +877,15 @@ def check_str(yaml_node, pos_stack):
             lexed, node_path, parse_e, lexer_e, annotations=annotations, debug=True
         )
         return FAIL_WHEN_ONLY_ANNOTATIONS
-    return isinstance(parse_e, Exception)
+    return isinstance(parse_e, Exception) or isinstance(lexer_e, Exception)
 
 
-def check_shell_command(v, pos_stack):
-    """Best-effort shell parsing"""
+def check_shell_command(v, pos_stack) -> bool:
+    """Best-effort shell parsing.
+
+    False: no error
+    True: error
+    """
     error = False
     text = v.value
     s = shlex.shlex(text, posix=True, punctuation_chars=True)
@@ -916,6 +956,7 @@ def check_val(doc, pos_stack, error=False):
         except StopIteration as e:
             output(Colored("\n" + HORIZONTAL_PIPE * OUT_COLS, "ERROR"))
             output(str(e))
+            output("Previous YAML token: ", Colored(repr(v), "data"))
             output("YAML parser/lexer exit before end of document.")
             output(Colored(HORIZONTAL_PIPE * OUT_COLS, "ERROR"))
             return True  # this is an error
@@ -926,7 +967,7 @@ def check_val(doc, pos_stack, error=False):
             # https://www.educative.io/blog/advanced-yaml-syntax-cheatsheet#anchors
             # similar to HTML <a id="v.anchor">
             ANCHORS[v.anchor] = v
-        # TODO need to implement special handling of the 'when:' keys
+
         if isinstance(v, ruamel.yaml.events.ScalarEvent):
             if S_KEY == state[-1][0]:
                 error |= check_str(v, pos_stack)
@@ -946,25 +987,32 @@ def check_val(doc, pos_stack, error=False):
                 state[-1] = (state[-1][0], next_idx)
                 pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], next_idx)
             elif S_VAL == state[-1][0]:
-                if state[-1][1] == "tags":
+                key = state[-1][1]  #  the yaml key that this value resides under
+                if key == "tags":
                     # when it's a scalar value, it's split by comma
                     filename = pos_stack[0][2].rstrip(":")
                     SEEN_TAGS[filename] = SEEN_TAGS.get(filename, set())
                     SEEN_TAGS[filename].update(
                         map(lambda x: x.strip(), v.value.split(","))
                     )
-                if state[-1][1] == "name":
+                elif key == "name":
                     error |= check_str(v, pos_stack)
                     # set context name of the parent node to the value of this:
                     if len(state) > 1 and state[-2][0] == S_SEQ:
                         pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], v.value)
-                elif state[-1][1] == "when":
-                    # TODO this is kind of a hack, and it skews the column numbers:
-                    v.value = "{{" + v.value + "}}"
-                    error |= check_str(v, pos_stack)
-                elif state[-1][1] in (r"cmd", r"shell", r"ansible.builtin.shell"):
+                elif key == "when":
+                    error |= check_str(v, pos_stack, wrap_in_jinja_brackets=True)
+                elif key == "register":
+                    # Here we should (TODO):
+                    # 1. mark this variable as a NON-EXTERNAL variable for the purposes
+                    #    of tracking --external
+                    # 2. Check that it's a single jinja "variable" token
+                    error |= check_str(
+                        v, pos_stack, wrap_in_jinja_brackets=True, key=key
+                    )
+                elif key in (r"cmd", r"shell", r"ansible.builtin.shell"):
                     # Special casing for shell commands
-                    # TODO technically speaking we should only do this within the 'shell' module, not the 'command' module.
+                    # We should only do this within the 'shell' module, not the 'command' module.
                     error |= check_str(v, pos_stack)
                     # TODO should probably be careful about complaining about shell lexing errors if
                     # the string is subject to Jinja expansion.

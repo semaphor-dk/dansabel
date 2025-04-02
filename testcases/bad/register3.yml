@@ -1,0 +1,6 @@
+---
+- name: "register shouldn't be empty, it needs exactly one 'name' token"
+  ansible.builtin.command:
+    cmd: "git rev-parse HEAD"
+  register: 
+...
