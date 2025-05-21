@@ -1116,6 +1116,18 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
         )
         return True
 
+    if {
+        "become_user",
+        "become_method",
+        "become_flags",
+    } & sibling_keys and "become" not in sibling_keys:
+        output(
+            Colored("WARNING: expected 'become:' in this task", "raw_begin"),
+            sibling_keys,
+            f"at {get_node_path(pos_stack[:-1])} lines {pos_stack[-1][0].line}-{v.end_mark.line}",
+        )
+        return True
+
     # TODO this list is probably not exhaustive:
     # TODO pull all the with_* from ansible/plugins/lookup/ etc
     ANSIBLE_EXPECTED_DUPLS = {
@@ -1124,6 +1136,8 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
         "async_status",
         "become",
         "become_args",
+        "become_flags",
+        "become_method",
         "become_user",
         "changed_when",
         "creates",
