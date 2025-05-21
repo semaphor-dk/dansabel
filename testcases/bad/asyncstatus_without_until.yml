@@ -1,0 +1,6 @@
+---
+- name: Check on an async task
+  async_status:
+    jid: "{{ yum_sleeper.ansible_job_id }}"
+  delay: 10
+...

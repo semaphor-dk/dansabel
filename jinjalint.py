@@ -1000,7 +1000,7 @@ def check_val(doc, pos_stack, error=False):
                     # set context name of the parent node to the value of this:
                     if len(state) > 1 and state[-2][0] == S_SEQ:
                         pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], v.value)
-                elif key == "when":
+                elif key in ("when", "until"):
                     error |= check_str(v, pos_stack, wrap_in_jinja_brackets=True)
                 elif key == "register":
                     # Here we should (TODO):
@@ -1097,15 +1097,70 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
                 # the exception is named block:s, we descend into those
                 continue
             return False  # no error
+
+    if "async_status" in sibling_keys and not (
+        "until" in sibling_keys or "register" in sibling_keys
+    ):
+        output(
+            Colored("WARNING: 'async_status' without 'until'/'register'", "raw_begin"),
+            sibling_keys,
+            f"at {get_node_path(pos_stack[:-1])} lines {pos_stack[-1][0].line}-{v.end_mark.line}",
+        )
+        return True
+
+    if "poll" in sibling_keys and "async" not in sibling_keys:
+        output(
+            Colored("WARNING: 'poll' without 'async'", "raw_begin"),
+            sibling_keys,
+            f"at {get_node_path(pos_stack[:-1])} lines {pos_stack[-1][0].line}-{v.end_mark.line}",
+        )
+        return True
+
     # TODO this list is probably not exhaustive:
     # TODO pull all the with_* from ansible/plugins/lookup/ etc
     ANSIBLE_EXPECTED_DUPLS = {
+        "args",
+        "async",
+        "async_status",
+        "become",
+        "become_args",
+        "become_user",
+        "changed_when",
+        "creates",
+        "connection",
+        "delay",
+        "delegate_to",
+        "environment",
+        "failed_when",
+        "gather_facts",
+        "handlers",
+        "hosts",
+        "ignore_errors",
+        "listen",  # for handlers
+        "loop",
+        "loop_control",
+        "mode",
+        "name",
+        "notify",
+        "poll",
+        "pre_tasks",
+        "register",
+        "retries",
+        "roles",
+        "run_once",
+        "tags",
+        "tasks",
+        "until",
+        "vars",
+        "vars_files",
+        "vars_prompt",
+        "when",
         "with_config",
         "with_csvfile",
         "with_dict",
         "with_env",
-        "with_fileglob",
         "with_file",
+        "with_fileglob",
         "with_first_found",
         "with_indexed_items",
         "with_ini",
@@ -1125,43 +1180,13 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
         "with_url",
         "with_varnames",
         "with_vars",
-        "name",
-        "hosts",
-        "notify",
-        "loop",
-        "name",
-        "become",
-        "become_user",
-        "become_args",
-        "ignore_errors",
-        "when",
-        "tags",
-        "register",
-        "vars",
-        "args",
-        "loop_control",
-        "environment",
-        "retries",
-        "run_once",
-        "failed_when",
-        "changed_when",
-        "delegate_to",
-        "until",
-        "delay",
-        "listen",  # for handlers
-        "roles",
-        "pre_tasks",
-        "gather_facts",
-        "connection",
-        "tasks",
-        "handlers",
-        "vars_files",
-        "vars_prompt",  # TODO these are not actually valid inside tasks,
+        # TODO these are not actually valid inside tasks,
         # but listing them here lowers the number of false positives when accidentally
         # running jinjalint.py on a playbook.
         # (we SHOULD be able to handle playbooks, since we are a commit hook for *.yml)
     }
     diff = sibling_keys.difference(ANSIBLE_EXPECTED_DUPLS)
+
     if len(diff) > 1:
         output(
             Colored("WARNING: potentially conflicting modules:", "raw_begin"),
@@ -1169,6 +1194,7 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
             f"at {get_node_path(pos_stack[:-1])} lines {pos_stack[-1][0].line}-{v.end_mark.line}",
         )
         return True
+
     return False
 
 

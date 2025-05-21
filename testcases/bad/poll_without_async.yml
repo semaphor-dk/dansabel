@@ -1,0 +1,8 @@
+---
+- name: Run an async task
+  ansible.builtin.yum:
+    name: docker-io
+    state: present
+  poll: 1
+  register: yum_sleeper
+...
