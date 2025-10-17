@@ -469,10 +469,14 @@ ANSIBLE_BUILTIN_FILTERS.update(
 # https://github.com/ansible/ansible/blob/2058ea59915655d71bf5bd9d3f7e318ffec3c658/lib/ansible/template/__init__.py#L649-L653
 # ^-- the hardcoded values above are currenty not accounted for.
 
-# Here we find 'd', 'e', etc:
-mock_template_env = ansible.template.AnsibleEnvironment()
-ANSIBLE_BUILTIN_FILTERS.update(mock_template_env.filters)
-ANSIBLE_BUILTIN_TESTS.update(set(mock_template_env.tests))
+# Here we find 'd', 'e', etc (2025-10-17: jk: does not seem to be needed for ansible >= 12 )
+try:
+  mock_template_env = ansible.template.AnsibleEnvironment()
+except AttributeError:
+  pass
+else:
+  ANSIBLE_BUILTIN_FILTERS.update(mock_template_env.filters)
+  ANSIBLE_BUILTIN_TESTS.update(set(mock_template_env.tests))
 
 BUILTIN_TESTS = JINJA_BUILTIN_TESTS.union(ANSIBLE_BUILTIN_TESTS)
 BUILTIN_FILTERS = JINJA_BUILTIN_FILTERS.union(ANSIBLE_BUILTIN_FILTERS)
