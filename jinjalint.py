@@ -10,6 +10,7 @@ import textwrap
 import argparse
 import shlex
 import json
+import traceback
 import importlib
 import ansible.plugins.filter
 import ansible.plugins.test
@@ -30,8 +31,8 @@ FAIL_WHEN_ONLY_ANNOTATIONS = True
 
 USE_COLORS = False
 
-EXTERNAL_VARIABLES = dict()
-SEEN_TAGS = dict()  # filename -> tags: conditionals
+EXTERNAL_VARIABLES: dict[str, set[str]] = dict()
+SEEN_TAGS: dict[str, set[str]] = dict()  # filename -> tags: conditionals
 ANCHORS = dict()  # aliases/anchors defined
 ALIASED_ANCHORS = dict()  # aliases/anchor used (referring to ANCHORS)
 
@@ -85,6 +86,8 @@ class Colored(collections.UserString):
             self.colors.extend(
                 [self.colors[-1:] or r"RESET"] * (len(self.strs) - len(self.colors))
             )
+    def __radd__(self, a) -> "Colored":
+        return Colored(a).__add__(self)
 
     def __add__(self, b):
         if isinstance(b, int):
@@ -446,7 +449,7 @@ ANSIBLE_BUILTIN_TESTS = set().union(
 
 JINJA_BUILTIN_FILTERS = set(jinja2.filters.FILTERS)
 
-ANSIBLE_BUILTIN_FILTERS = set()
+ANSIBLE_BUILTIN_FILTERS: set[str] = set()
 ANSIBLE_BUILTIN_FILTERS = ANSIBLE_BUILTIN_FILTERS.union(
     load_ansible_collections_filters()
 )
@@ -843,7 +846,7 @@ def check_str(
     if (consumed + 1 == len(s)) and "\n" == s[-1]:
         pass  # ignore these trailing newlines
     elif consumed < len(s):
-        not_consumed = {"tag": "NOT_CONSUMED", "lines": []}
+        not_consumed: dict[str, str|list[dict[str, int|str]]] = {"tag": "NOT_CONSUMED", "lines": []}
         for lin in s[consumed:].splitlines(True):
             not_consumed["lines"].append(
                 {"line": file_line + lex_line, "byteoff": lex_col, "text": lin}
@@ -934,7 +937,7 @@ def check_shell_command(v, pos_stack) -> bool:
             )
             error = True
             return error
-    if ";}" in cmd or ";};" in cmd:  # detects most common broken shell grouping
+    if cmd and (";}" in cmd or ";};" in cmd):  # detects most common broken shell grouping
         output(Colored(HORIZONTAL_PIPE * OUT_COLS, "string"))
         output(Colored('WARNING: ";}" found, did you mean "; }" ?', "comment"), context)
 
@@ -1216,23 +1219,22 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
     return False
 
 
-def raw_scalar_generator(payload):
+def raw_scalar_generator(file_contents: str, file_name: Path):
     """Mock parse event generator for raw jinja2 files"""
     yield ruamel.yaml.events.StreamStartEvent()
     yield ruamel.yaml.events.DocumentStartEvent()
     yield ruamel.yaml.events.MappingStartEvent(
         anchor=None, tag=None, implicit=True, flow_style=False
     )
-    start_mark = ruamel.yaml.reader.FileMark(payload, index=0, column=-1, line=-1)
-    with open(payload) as fd:
-        yield ruamel.yaml.events.ScalarEvent(
-            anchor=None,
-            tag=None,
-            implicit=(True, False),
-            value=fd.read(),
-            style="",
-            start_mark=start_mark,
-        )
+    start_mark = ruamel.yaml.reader.FileMark(file_name, index=0, column=-1, line=-1)
+    yield ruamel.yaml.events.ScalarEvent(
+        anchor=None,
+        tag=None,
+        implicit=(True, False),
+        value=file_contents,
+        style="",
+        start_mark=start_mark,
+    )
     # signal to our own parser that we completed successfully:
     yield ruamel.yaml.events.DocumentEndEvent()
     yield ruamel.yaml.events.StreamEndEvent()
@@ -1276,19 +1278,16 @@ def ruamel_generator(filename):
         return err  # this will raise a StopIteration exception in the consumer
 
 
-def lint(filename):
+def lint(filename:Path):
     try:
-        if filename.endswith(".yaml") or filename.endswith(".yml"):
+        if filename.suffix in (".yaml", ".yml"):
             doc = ruamel_generator(filename)
         else:  # assume it's raw jinja2, mock up AST nodes:
-            doc = raw_scalar_generator(filename)
-        return check_val(doc, pos_stack=[(0, 0, filename + ":")])
+            doc = raw_scalar_generator(filename.read_text(), filename)
+        return check_val(doc, pos_stack=[(0, 0, str(filename) + ":")])
     except Exception:
-        import traceback
-
         output(traceback.format_exc())
         return True  # that did not go well, perhaps file not found or yaml parsing err
-
 
 if "__main__" == __name__:
     a_parser = argparse.ArgumentParser(
@@ -1305,7 +1304,7 @@ if "__main__" == __name__:
   Set environment variable NO_COLOR to disable colored output.
 """,
     )
-    a_parser.add_argument("FILE", nargs="+")
+    a_parser.add_argument("FILE", nargs="+", type=Path)
     a_parser.add_argument(
         "-C",
         "--context-lines",
@@ -1338,6 +1337,7 @@ Use -q to print ONLY this JSON summary.""",
     group_analysis.add_argument(
         "-t", "--tags", action="store_true", help="""List encountered tags."""
     )
+
     args = a_parser.parse_args()
 
     if args.quiet:
@@ -1371,7 +1371,7 @@ Use -q to print ONLY this JSON summary.""",
         json_dump["external_variables"] = EXTERNAL_VARIABLES
     if args.tags:
         json_dump["files_to_tags"] = SEEN_TAGS
-        tags_to_files = dict()
+        tags_to_files: dict[str, set[str]] = dict()
         for fn, tags in SEEN_TAGS.items():
             for tag in tags:
                 tags_to_files[tag] = tags_to_files.get(tag, set())

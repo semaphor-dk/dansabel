@@ -1,0 +1,4 @@
+- name: colon1
+  when: "\"Foo: 'Bar'\" in 'Hello'"
+  apt:
+    name: vim
