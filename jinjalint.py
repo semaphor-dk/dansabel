@@ -86,6 +86,7 @@ class Colored(collections.UserString):
             self.colors.extend(
                 [self.colors[-1:] or r"RESET"] * (len(self.strs) - len(self.colors))
             )
+
     def __radd__(self, a) -> "Colored":
         return Colored(a).__add__(self)
 
@@ -474,12 +475,12 @@ ANSIBLE_BUILTIN_FILTERS.update(
 
 # Here we find 'd', 'e', etc (2025-10-17: jk: does not seem to be needed for ansible >= 12 )
 try:
-  mock_template_env = ansible.template.AnsibleEnvironment()
+    mock_template_env = ansible.template.AnsibleEnvironment()
 except AttributeError:
-  pass
+    pass
 else:
-  ANSIBLE_BUILTIN_FILTERS.update(mock_template_env.filters)
-  ANSIBLE_BUILTIN_TESTS.update(set(mock_template_env.tests))
+    ANSIBLE_BUILTIN_FILTERS.update(mock_template_env.filters)
+    ANSIBLE_BUILTIN_TESTS.update(set(mock_template_env.tests))
 
 BUILTIN_TESTS = JINJA_BUILTIN_TESTS.union(ANSIBLE_BUILTIN_TESTS)
 BUILTIN_FILTERS = JINJA_BUILTIN_FILTERS.union(ANSIBLE_BUILTIN_FILTERS)
@@ -846,7 +847,10 @@ def check_str(
     if (consumed + 1 == len(s)) and "\n" == s[-1]:
         pass  # ignore these trailing newlines
     elif consumed < len(s):
-        not_consumed: dict[str, str|list[dict[str, int|str]]] = {"tag": "NOT_CONSUMED", "lines": []}
+        not_consumed: dict[str, str | list[dict[str, int | str]]] = {
+            "tag": "NOT_CONSUMED",
+            "lines": [],
+        }
         for lin in s[consumed:].splitlines(True):
             not_consumed["lines"].append(
                 {"line": file_line + lex_line, "byteoff": lex_col, "text": lin}
@@ -937,7 +941,9 @@ def check_shell_command(v, pos_stack) -> bool:
             )
             error = True
             return error
-    if cmd and (";}" in cmd or ";};" in cmd):  # detects most common broken shell grouping
+    if cmd and (
+        ";}" in cmd or ";};" in cmd
+    ):  # detects most common broken shell grouping
         output(Colored(HORIZONTAL_PIPE * OUT_COLS, "string"))
         output(Colored('WARNING: ";}" found, did you mean "; }" ?', "comment"), context)
 
@@ -1123,6 +1129,27 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
         )
         return True
 
+    if "rescue" in sibling_keys and "block" not in sibling_keys:
+        output(
+            Colored("WARNING: 'rescue' without 'block'", "raw_begin"),
+            sibling_keys,
+            f"at {get_node_path(pos_stack[:-1])} lines {pos_stack[-1][0].line}-{v.end_mark.line}",
+        )
+        return True
+
+    if {
+        "include_tasks",
+        "ansible.builtin.include_tasks",
+    } & sibling_keys and {
+        "notify",
+    } & sibling_keys:
+        output(
+            Colored("WARNING: include_tasks: cannot notify:"),
+            sibling_keys,
+            f"at {get_node_path(pos_stack[:-1])} lines {pos_stack[-1][0].line}-{v.end_mark.line}",
+        )
+        return True
+
     if {
         "become_user",
         "become_method",
@@ -1208,6 +1235,9 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
     }
     diff = sibling_keys.difference(ANSIBLE_EXPECTED_DUPLS)
 
+    if "block" in diff:
+        diff.discard("rescue")
+
     if len(diff) > 1:
         output(
             Colored("WARNING: potentially conflicting modules:", "raw_begin"),
@@ -1278,7 +1308,7 @@ def ruamel_generator(filename):
         return err  # this will raise a StopIteration exception in the consumer
 
 
-def lint(filename:Path):
+def lint(filename: Path):
     try:
         if filename.suffix in (".yaml", ".yml"):
             doc = ruamel_generator(filename)
@@ -1288,6 +1318,7 @@ def lint(filename:Path):
     except Exception:
         output(traceback.format_exc())
         return True  # that did not go well, perhaps file not found or yaml parsing err
+
 
 if "__main__" == __name__:
     a_parser = argparse.ArgumentParser(

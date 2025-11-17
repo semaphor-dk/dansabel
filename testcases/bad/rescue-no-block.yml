@@ -1,0 +1,6 @@
+---
+- name: "outer block"
+  rescue:
+    - debug:
+        msg: "there is no inner block to rescue from"
+...

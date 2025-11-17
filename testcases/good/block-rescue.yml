@@ -1,0 +1,9 @@
+---
+- name: "outer block"
+  block:
+    - debug:
+        msg: "inner block"
+  rescue:
+    - debug:
+        msg: "the inner block failed"
+...

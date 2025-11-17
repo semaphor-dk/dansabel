@@ -1,0 +1,8 @@
+#[ERROR]: 'notify' is not a valid attribute for a TaskInclude
+
+- name: "Verify firewall"
+  ansible.builtin.include_tasks:
+    file: "verify-firewall.yml"
+  notify:
+    - "Firewall looks great"
+
