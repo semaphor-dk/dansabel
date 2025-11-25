@@ -1032,6 +1032,11 @@ def check_val(doc, pos_stack, error=False):
                     error |= check_shell_command(v, pos_stack)
                 else:
                     error |= check_str(v, pos_stack)
+                if key in (r"meta", "ansible.builtin.meta"):
+                    # meta: is special because the actual task depends on the value,
+                    # so we rewrite it to contain the value:
+                    state[-1][2].remove(key)
+                    state[-1][2].add(f"ansible.builtin.meta:{v.value}")
                 state[-1] = (S_KEY, None, *state[-1][2:])
         elif isinstance(v, ruamel.yaml.events.SequenceStartEvent) or isinstance(
             v, ruamel.yaml.events.MappingStartEvent
@@ -1095,7 +1100,6 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
         or "/defaults/" in filepath
     ):
         return False  # no error, we're looking for tasks
-
     #### The rest of this function looks for cases where a task has more than one module:
     if state[-1][0] != S_KEY:
         return False
@@ -1124,6 +1128,26 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
     if "poll" in sibling_keys and "async" not in sibling_keys:
         output(
             Colored("WARNING: 'poll' without 'async'", "raw_begin"),
+            sibling_keys,
+            f"at {get_node_path(pos_stack[:-1])} lines {pos_stack[-1][0].line}-{v.end_mark.line}",
+        )
+        return True
+
+    if "block" in sibling_keys:
+        for loopd in sibling_keys:
+            if loopd.startswith("with_") or loopd == "loop":
+                output(
+                    Colored(
+                        f"WARNING: '{loopd}' not allowed with 'block'", "raw_begin"
+                    ),
+                    sibling_keys,
+                    f"at {get_node_path(pos_stack[:-1])} lines {pos_stack[-1][0].line}-{v.end_mark.line}",
+                )
+                return True
+
+    if "ansible.builtin.meta:noop" in sibling_keys and "when" in sibling_keys:
+        output(
+            Colored("WARNING: 'when' not allowed with 'meta: noop'", "raw_begin"),
             sibling_keys,
             f"at {get_node_path(pos_stack[:-1])} lines {pos_stack[-1][0].line}-{v.end_mark.line}",
         )
@@ -1190,6 +1214,7 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
         "mode",
         "name",
         "notify",
+        "no_log",
         "poll",
         "pre_tasks",
         "register",

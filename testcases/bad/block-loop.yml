@@ -1,0 +1,11 @@
+---
+
+- name: block loop
+  block:
+    - name: "something"
+      debug:
+        msg: "is this a loop?"
+  loop:
+    - "no that is not allowed"
+
+...

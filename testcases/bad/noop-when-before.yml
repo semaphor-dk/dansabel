@@ -1,0 +1,7 @@
+---
+
+- name: when specified before noop
+  when: false
+  ansible.builtin.meta: noop
+
+...

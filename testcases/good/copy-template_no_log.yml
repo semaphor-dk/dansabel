@@ -1,0 +1,9 @@
+---
+
+- name: real
+  ansible.builtin.copy:
+    dest: "/tmp/foo"
+    content: "bar"
+  no_log: false
+
+...

@@ -1,0 +1,11 @@
+---
+
+- name: block with_items
+  block:
+    - name: "something"
+      debug:
+        msg: "is this a loop?"
+  with_items:
+    - "no that is not allowed"
+
+...
