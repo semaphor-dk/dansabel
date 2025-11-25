@@ -423,7 +423,10 @@ def load_ansible_collections_filters():
         else:
             parts = f._parts[f._parts.index("ansible_collections") :]
         parts[-1] = parts[-1].replace(".py", "")
-        mod = importlib.import_module(".".join(parts), package=ansible_collections)
+        try:
+            mod = importlib.import_module(".".join(parts), package=ansible_collections)
+        except ImportError:
+            continue
         filters = mod.FilterModule().filters().keys()
         filter_ns = (
             ".".join(parts[1:-3]) + "."
