@@ -375,7 +375,7 @@ def print_lexed_debug(
             if "NOT_CONSUMED" == tok["tag"]:
                 break  # only print the first unlexed line
         # we're still looping over tokens, here we effectuate the changed scope when leaving a block:
-        if idx - 1 >= 0 and is_scope_close(first_non_whitespace(lexed[idx - 1 :: -1])):
+        if idx - 1 >= 0 and (nwsp := first_non_whitespace(lexed[idx - 1 :: -1])) and is_scope_close(nwsp):
             for nst_idx, (scope_len, typ) in enumerate(next_scope_transition):
                 if len(open_tag_stack) == scope_len:
                     open_tag_stack.append(typ)
@@ -1033,6 +1033,12 @@ def check_val(doc, pos_stack, error=False):
                     # TODO should probably be careful about complaining about shell lexing errors if
                     # the string is subject to Jinja expansion.
                     error |= check_shell_command(v, pos_stack)
+                elif key == "src":
+                    # pos_stack[0][2]
+                    # v.value is the path in a files/
+                    # if the parent stack is "ansible.builtin.copy"
+                    # TODO: breakpoint()
+                    error |= check_str(v, pos_stack)
                 else:
                     error |= check_str(v, pos_stack)
                 if key in (r"meta", "ansible.builtin.meta"):
