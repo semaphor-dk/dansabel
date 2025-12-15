@@ -375,7 +375,11 @@ def print_lexed_debug(
             if "NOT_CONSUMED" == tok["tag"]:
                 break  # only print the first unlexed line
         # we're still looping over tokens, here we effectuate the changed scope when leaving a block:
-        if idx - 1 >= 0 and (nwsp := first_non_whitespace(lexed[idx - 1 :: -1])) and is_scope_close(nwsp):
+        if (
+            idx - 1 >= 0
+            and (nwsp := first_non_whitespace(lexed[idx - 1 :: -1]))
+            and is_scope_close(nwsp)
+        ):
             for nst_idx, (scope_len, typ) in enumerate(next_scope_transition):
                 if len(open_tag_stack) == scope_len:
                     open_tag_stack.append(typ)
@@ -990,6 +994,13 @@ def check_val(doc, pos_stack, error=False):
                 state[-1] = (S_VAL, v.value, *state[-1][2:])
                 # 'name', 'when', etc need special handling
                 # here we change the name of the parent mapping itself (starts out as empty):
+                if v.value in state[-1][2]:
+                    output(
+                        Colored("duplicate YAML key ", "ERROR")
+                        + v.value
+                        + Colored(pos_stack[-1][1], "ERROR")
+                    )
+                    error = True
                 state[-1][2].add(v.value)
                 pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], v.value)
             elif S_SEQ == state[-1][0]:

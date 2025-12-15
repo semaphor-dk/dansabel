@@ -1,0 +1,7 @@
+---
+- name: "When supplied twice"
+  when: 1
+  when: 0
+  debug:
+   msg: "Should complain about the when: supplied twice"
+...
