@@ -1,0 +1,9 @@
+---
+- name: "outer block with always"
+  block:
+    - ansible.builtin.debug:
+        msg: "inner block"
+  always:
+    - ansible.builtin.debug:
+        msg: "regardless of the inner block"
+...

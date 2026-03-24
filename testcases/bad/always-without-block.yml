@@ -1,0 +1,6 @@
+---
+- name: "outer block with always but no block"
+  always:
+    - ansible.builtin.debug:
+        msg: "missing a block: here"
+...

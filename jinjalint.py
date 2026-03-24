@@ -1181,6 +1181,14 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
         )
         return True
 
+    if "always" in sibling_keys and "block" not in sibling_keys:
+        output(
+            Colored("WARNING: 'always' without 'block'", "raw_begin"),
+            sibling_keys,
+            f"at {get_node_path(pos_stack[:-1])} lines {pos_stack[-1][0].line}-{v.end_mark.line}",
+        )
+        return True
+
     if {
         "include_tasks",
         "ansible.builtin.include_tasks",
@@ -1282,6 +1290,7 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
 
     if "block" in diff:
         diff.discard("rescue")
+        diff.discard("always")
 
     if len(diff) > 1:
         output(

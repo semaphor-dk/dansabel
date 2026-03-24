@@ -1,0 +1,18 @@
+---
+- name: Attempt rollback
+  block:
+    - name: Do Something
+      ansible.builtin.shell: grep $(whoami) /etc/hosts
+  rescue:
+    - name: All is good if the first task failed
+      when: ansible_failed_task.name == 'Do Something'
+      ansible.builtin.debug:
+        msg: All is good, recovered
+    - name: All is not good actually
+      ansible.builtin.fail:
+        msg: Failure!
+  always:
+    - name: Print done
+      ansible.builtin.debug:
+       msg: Done!
+...
