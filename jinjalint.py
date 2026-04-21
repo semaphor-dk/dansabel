@@ -325,7 +325,8 @@ def print_lexed_debug(
             if not debug:  # this is the inline display:
                 if is_new_line:
                     linebuf += Colored(str(current_line).ljust(5), line_color)
-                linebuf += Colored(lin.get("text"), tok["tag"])
+                wrap = tok.get("style", "")
+                linebuf += Colored(wrap + lin.get("text") + wrap, tok["tag"])
                 if "NOT_CONSUMED" == tok["tag"]:
                     break  # only print the first unlexed line
                 continue
@@ -364,7 +365,8 @@ def print_lexed_debug(
                 Colored(HORIZONTAL_PIPE * (offset - len(tok["tag"])), tok["tag"]) + " "
             )
             linebuf += tok["tag"] + ": "
-            linebuf += Colored(transformed, tok["tag"])
+            wrap = tok.get("style", "")
+            linebuf += Colored(wrap + transformed + wrap, tok["tag"])
             for annot in filter(lambda x: x["tok"] == tok, annotations):
                 for msg in textwrap.wrap(
                     "\u269e " + annot["comment"] + "\u269f",
@@ -832,6 +834,8 @@ def check_str(
                 # ignore the {{ and }} we add to force when: to be an expression
                 continue
             token = {"tag": rawtok[1], "lines": []}
+            if getattr(yaml_node, "style") in ('"', "'"):
+                token["style"] = yaml_node.style
 
             for lineno, text in enumerate(rawtok[2].splitlines(True)):
                 token["lines"].append(
@@ -867,6 +871,22 @@ def check_str(
         lexed.append(not_consumed)
     annotations = parse_lexed(lexed)
     if key == "register":
+        if yaml_node.style:
+            annotations.append(
+                {
+                    "comment": "register: variables should not be quoted but has: "
+                    + repr(yaml_node.style),
+                    "tok": (lexed and lexed[0])
+                    or {
+                        "lines": [
+                            # not sure how we get here, but we do when the scalar is "":
+                            {"line": file_line, "byteoff": 1, "text": "TODO"}
+                        ],
+                        "tag": "name",
+                    },
+                    "related_tokens": [],
+                }
+            )
         seen_names = False
         for token in lexed:
             if token["tag"] == "whitespace":
@@ -1029,7 +1049,7 @@ def check_val(doc, pos_stack, error=False):
                         pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], v.value)
                 elif key in ("when", "until"):
                     error |= check_str(v, pos_stack, wrap_in_jinja_brackets=True)
-                elif key == "register":
+                elif key in ("register",):
                     # Here we should (TODO):
                     # 1. mark this variable as a NON-EXTERNAL variable for the purposes
                     #    of tracking --external
@@ -1071,6 +1091,11 @@ def check_val(doc, pos_stack, error=False):
                 pos_stack[-1] = (pos_stack[-1][0], pos_stack[-1][1], str(state[-1][1]))
                 next_idx = state[-1][1] + 1
                 state[-1] = (state[-1][0], next_idx)
+
+            if state and (key := state[-1][1]):
+                if key in ("register",):
+                    output(Colored(f"{key} cannot be a sequence/dict" + str(v.start_mark), "ERROR"))
+                    error = True
             # Open a new context for the contents of this mapping:
             if isinstance(v, ruamel.yaml.events.SequenceStartEvent):
                 # for sequence states we track the list item offset

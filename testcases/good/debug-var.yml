@@ -1,0 +1,5 @@
+---
+- name: Display a variable
+  debug:
+    var: ansible_hostname
+...

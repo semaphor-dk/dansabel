@@ -1,0 +1,6 @@
+---
+- name: Register should not be quoted
+  command: id
+  register: [11,22]
+  # with ["my_id", "A"]  as well
+...

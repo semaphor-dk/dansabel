@@ -1,0 +1,5 @@
+---
+- name: Register should not be quoted
+  command: id
+  register: 'my_id'
+...
