@@ -1151,6 +1151,10 @@ def lint_ansible_directives(v: ruamel.yaml.events.MappingEndEvent, state, pos_st
     sibling_keys = state[-1][2]
     if "name" not in sibling_keys:
         return False
+    if len(state) >= 2 and "collections" == state[1][1]:
+        # Probably this:
+        # https://docs.ansible.com/projects/ansible/latest/collections_guide/collections_installing.html
+        return False  # no error
     for st in state[:-1]:
         # here we loop over our ancestors and stop at the first "name:"
         # the idea being that if they have a name:, we are probably not a task ourselves.
