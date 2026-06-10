@@ -1,0 +1,10 @@
+---
+# https://docs.ansible.com/projects/ansible/latest/collections_guide/collections_installing.html#install-multiple-collections-with-a-requirements-file
+# dansabel used to parse the `name` stanzas as tasks:
+collections:
+  - name: "community.general"
+    source: "https://galaxy.ansible.com"
+  - name: "community.proxmox"
+    version: "2.0.0"
+    source: "https://galaxy.ansible.com"
+...
