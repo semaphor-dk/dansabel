@@ -1,0 +1,8 @@
+---
+
+- name: "install this-file-exists.txt"
+  ansible.builtin.copy:
+    dest: "/tmp/this-file-exists.txt"
+    src: "this-file-exists.txt"
+
+...

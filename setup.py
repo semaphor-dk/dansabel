@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="dansabel",
-    version="1.5.1",
+    version="1.8.92",
     install_requires=[
         "ruamel.yaml",
         "jinja2",
