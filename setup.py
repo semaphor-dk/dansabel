@@ -7,7 +7,8 @@ setup(
         "ruamel.yaml",
         "jinja2",
         "ansible-core",
-        "ansible",  # large dep, but needed for ansible_collections
+        "ansible!=14.3.0",  # large dep, but needed for ansible_collections.
+        # 14.3.0 has a bug, see 14.3.1 release notes: https://forum.ansible.com/t/release-announcement-ansible-community-package-14-3-1/46178
         # These test cases depend on it:
         # testcases/good/templates/namespaced-filters.j2
         # testcases/good/templates/namespaced-filters-community.j2

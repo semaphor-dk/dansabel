@@ -1,0 +1,11 @@
+---
+
+# in Python you can use a|b to access a.__or__(b),
+# but that's not exposed in jinja2/ansible.
+# Instead we expect a suggestion to use Jinja's "combine" filter
+# when we see operator "}" operator "+" operator "{"
+
+- name: "Try merging two dicts with +"
+  debug:
+    msg: "{{ {1:2} + {3:4} }}"
+...
